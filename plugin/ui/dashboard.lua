@@ -49,8 +49,14 @@ local debugClock = nil      -- the debug section's first line, updated in place
 local onClear = nil         -- function(worldNumber), set by main.lua
 local freshParent = false   -- true from opening the page until the first build works
 
--- Latest data from main.lua, so a freshly opened page shows it at once.
-local lastModel, lastNow, lastDebugLines = nil, nil, nil
+-- Removes the view (if any). Destroy can fail if the page was already
+-- closed and its components are gone; that's fine, we drop it either way.
+local function destroyView()
+    if view ~= nil then
+        safe.try(function() view:Destroy() end)
+    end
+    view = nil
+end
 
 -- main.lua gives the function that clears a world's data.
 function dashboard.setOnClear(fn)
@@ -85,15 +91,17 @@ end
 -- ".." joins strings; tostring turns nil/true into "nil"/"true".
 local function signatureOf(model, now, debugLines)
     local parts = { tostring(model.scouted) }
-    local function addRow(row)
+    local function addRowSignature(row)
+        -- Whether a countdown line is shown (see overview.countdownText).
+        local hasCountdown = row.eventAt ~= nil and now ~= nil
         parts[#parts + 1] = row.heading .. "|" .. tostring(row.place) .. "|" .. tostring(row.eventLabel)
-            .. "|" .. tostring(overview.countdownText(row, now) ~= nil)
+            .. "|" .. tostring(hasCountdown)
     end
     if model.current ~= nil then
-        addRow(model.current)
+        addRowSignature(model.current)
     end
     for _, row in ipairs(model.others) do
-        addRow(row)
+        addRowSignature(row)
     end
     if debugLines ~= nil then
         -- Skip line 1 (the clock): it's updated in place.
@@ -164,13 +172,10 @@ end
 
 -- Destroys the current view (if any) and builds a new one, keeping the
 -- scroll position so a rebuild doesn't jump back to the top.
-local function rebuild(model, now, debugLines)
-    local scrollY = 0
-    if view ~= nil then
-        scrollY = view.scrollY or 0
-        safe.try(function() view:Destroy() end)
-        view = nil
-    end
+-- newSignature is signatureOf(model, now, debugLines), already worked out.
+local function rebuild(model, now, debugLines, newSignature)
+    local scrollY = view and view.scrollY or 0
+    destroyView()
     view = prettyui.SimpleView.new(parent, {
         x = 8,
         y = 8,
@@ -181,7 +186,7 @@ local function rebuild(model, now, debugLines)
     if scrollY > 0 then
         safe.try(function() view:SetScrollPosition(scrollY) end)
     end
-    signature = signatureOf(model, now, debugLines)
+    signature = newSignature
 end
 
 -- Shows the latest data. main.lua calls this about once a second.
@@ -189,23 +194,19 @@ end
 --   now         the time (Unix ms, or nil)
 --   debugLines  list of strings for the debug section, or nil for none
 function dashboard.update(model, now, debugLines)
-    lastModel, lastNow, lastDebugLines = model, now, debugLines
     if parent == nil then
-        return      -- the ribbon page hasn't been opened yet
+        return      -- the ribbon page isn't open
     end
-    if view == nil or signatureOf(model, now, debugLines) ~= signature then
-        -- pcall(f, a, b, c) calls f(a, b, c), catching any error.
-        local ok, err = pcall(rebuild, model, now, debugLines)
+    local newSignature = signatureOf(model, now, debugLines)
+    if view == nil or newSignature ~= signature then
+        -- pcall(f, a, b) calls f(a, b), catching any error.
+        local ok, err = pcall(rebuild, model, now, debugLines, newSignature)
         if ok then
             freshParent = false
             return
         end
         log("[error] dashboard build: " .. tostring(err))
-        -- Remove whatever was half built.
-        if view ~= nil then
-            safe.try(function() view:Destroy() end)
-            view = nil
-        end
+        destroyView()                   -- remove whatever was half built
         if freshParent then
             dashboard.failed = true     -- main.lua falls back to the plain panel
         end
@@ -237,32 +238,29 @@ function dashboard.update(model, now, debugLines)
         -- Start fresh when it's opened again. Logged so we can tell if it
         -- was something else.
         log("[error] dashboard update: " .. tostring(err))
-        safe.try(function() view:Destroy() end)
-        view = nil
+        destroyView()
         parent = nil
     end
 end
 
 -- Call from Event.ContentLayerReady: the client gives a new, empty page
 -- component each time the player opens our page in the Plugins window.
+-- The caller then calls dashboard.update to draw into it.
 function dashboard.attachToRibbon(event)
-    if view ~= nil then
-        safe.try(function() view:Destroy() end)
-        view = nil
-    end
+    destroyView()
     parent = event.component
     freshParent = true
-    if lastModel ~= nil then
-        dashboard.update(lastModel, lastNow, lastDebugLines)
-    end
+end
+
+-- True while there's a page to draw into (so main.lua can skip the work
+-- of building the data when nobody can see it).
+function dashboard.isOpen()
+    return parent ~= nil
 end
 
 -- Called when the plugin shuts down.
 function dashboard.destroy()
-    if view ~= nil then
-        safe.try(function() view:Destroy() end)
-        view = nil
-    end
+    destroyView()
     parent = nil
 end
 

@@ -108,8 +108,9 @@ local function addCapture(text, fullText)
     devlog.print("[capture]", line)
 end
 
--- Milliseconds -> "1h42m" or "42m".
-local function formatDuration(ms)
+-- Milliseconds -> "1h42m" or "42m" (for the capture log; the dashboard
+-- uses overview.formatDuration, which shows seconds).
+local function formatMinutes(ms)
     local totalMinutes = ms // MS_PER_MINUTE
     local hours = totalMinutes // 60
     local minutes = totalMinutes % 60
@@ -154,38 +155,18 @@ local function describeRecord(record)
     return text
 end
 
--- How many worlds we have intel on ("Scouted N / 137"). Worlds that aren't
--- in data/worlds.lua (the beta worlds 204 / 205) count too, so the number
--- means something on the beta.
-local function scoutedCount()
-    local count = 0
-    for _ in pairs(store.worlds) do     -- "_" = a loop variable we don't use
-        count = count + 1
-    end
-    return count
-end
-
--- Lines for the other worlds we have intel on, soonest next event first,
--- e.g. "W204 none | next: spawns 06:07:43 | hint '...'". At most maxLines.
-local function otherWorldLines(maxLines)
-    local entries = {}
-    for number, record in pairs(store.worlds) do
-        if number ~= currentWorld.number then
-            local _, at = worldstate.nextEvent(record, clock.now())  -- only the time is needed
-            -- math.huge is Infinity: worlds with nothing due sort last.
-            entries[#entries + 1] = { number = number, record = record, at = at or math.huge }
-        end
-    end
-    -- table.sort with a comparison function, like array.sort((a, b) => ...)
-    -- in JS, except it returns true when a should come first.
-    table.sort(entries, function(a, b) return a.at < b.at end)
+-- Lines for the other worlds we have intel on, in the dashboard's order
+-- (soonest next event first), e.g.
+-- "W204 none | next: spawns 06:07:43 | hint '...'". At most maxLines.
+-- otherRows is overview.build's "others" list.
+local function otherWorldLines(otherRows, maxLines)
     local lines = {}
-    for index, entry in ipairs(entries) do
+    for index, row in ipairs(otherRows) do
         if index > maxLines then
-            lines[#lines + 1] = "  (+" .. (#entries - maxLines) .. " more)"
+            lines[#lines + 1] = "  (+" .. (#otherRows - maxLines) .. " more)"
             break
         end
-        lines[#lines + 1] = "  W" .. entry.number .. " " .. describeRecord(entry.record)
+        lines[#lines + 1] = "  W" .. row.world .. " " .. describeRecord(store.worlds[row.world])
     end
     return lines
 end
@@ -198,8 +179,10 @@ local function shorten(text, maxLength)
     return string.sub(text, 1, maxLength - 3) .. "..."
 end
 
-
-local function refreshPanel()
+-- The debug text: clock, saving, this world's full record, other worlds,
+-- recent captures. model is overview.build's result (for the scouted count
+-- and the order of the other worlds).
+local function debugLines(model)
     local worldText = "unknown"
     if currentWorld.number ~= nil then
         worldText = tostring(currentWorld.number)
@@ -235,23 +218,36 @@ local function refreshPanel()
             .. "  |  saved " .. savedText,
         "v" .. VERSION .. "  |  prev " .. previousText,
         "This world: " .. shorten(describeRecord(store.worlds[currentWorld.number or -1]), 110),
-        "Scouted " .. scoutedCount() .. " / " .. #worlds.list .. " worlds. Other worlds:",
+        "Scouted " .. model.scouted .. " / " .. model.total .. " worlds. Other worlds:",
     }
-    for _, line in ipairs(otherWorldLines(MAX_OTHER_WORLDS)) do
+    for _, line in ipairs(otherWorldLines(model.others, MAX_OTHER_WORLDS)) do
         lines[#lines + 1] = shorten(line, 110)
     end
     lines[#lines + 1] = "Recent (newest first, full log saved):"
     for _, line in ipairs(recentCaptures) do
         lines[#lines + 1] = line
     end
+    return lines
+end
 
-    if USE_DASHBOARD then
-        local now = clock.now()
-        local model = overview.build(store.worlds, currentWorld.number, now, worlds.count)
-        -- "SHOW_DEBUG and lines or nil" is Lua's SHOW_DEBUG ? lines : nil.
-        dashboard.update(model, now, SHOW_DEBUG and lines or nil)
+-- True when the dashboard is in use: PrettyUI is there, and it hasn't
+-- failed to draw (then the plain panel takes over, see ContentLayerReady).
+local function usingDashboard()
+    return USE_DASHBOARD and not dashboard.failed
+end
+
+-- Redraws the dashboard (or the plain panel). Called once a second.
+local function refreshPanel()
+    local now = clock.now()
+    if usingDashboard() and not dashboard.isOpen() then
+        return      -- nobody can see it; it's redrawn when the page opens
+    end
+    local model = overview.build(store.worlds, currentWorld.number, now, worlds.count)
+    if usingDashboard() then
+        -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
+        dashboard.update(model, now, SHOW_DEBUG and debugLines(model) or nil)
     else
-        debugPanel.show(lines)
+        debugPanel.show(debugLines(model))
     end
 end
 
@@ -327,7 +323,7 @@ dialogue.setOnPage(function(speaker, text)
     if facts.rewardsWindow then parts[#parts + 1] = "dead, rewards window" end
     if facts.treeAlive then parts[#parts + 1] = "tree alive" end
     if facts.saplingExists then parts[#parts + 1] = "sapling" end
-    if facts.timerMs then parts[#parts + 1] = "spawn in " .. formatDuration(facts.timerMs) end
+    if facts.timerMs then parts[#parts + 1] = "spawn in " .. formatMinutes(facts.timerMs) end
     if facts.treeType then
         parts[#parts + 1] = "type " .. facts.treeType .. (facts.isSapling and " (sapling)" or " (mature)")
     end
@@ -443,18 +439,17 @@ end))
 if USE_RIBBON then
     -- Fires each time the player opens this plugin's page in the Plugins window.
     Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
-        if USE_DASHBOARD then
+        if usingDashboard() then
             dashboard.attachToRibbon(event)
-            if dashboard.failed then
-                -- PrettyUI couldn't draw on a freshly opened page: use the
-                -- plain panel for the rest of this session.
-                log("Evil Trees: the dashboard failed to draw; showing the plain panel instead.")
-                USE_DASHBOARD = false
+            refreshPanel()
+            if not dashboard.failed then
+                return
             end
+            -- PrettyUI couldn't draw on a freshly opened page: use the plain
+            -- panel for the rest of this session.
+            log("Evil Trees: the dashboard failed to draw; showing the plain panel instead.")
         end
-        if not USE_DASHBOARD then
-            debugPanel.attachToRibbon(event)
-        end
+        debugPanel.attachToRibbon(event)
         refreshPanel()
     end))
 else
