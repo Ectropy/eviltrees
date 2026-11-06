@@ -31,11 +31,16 @@ local function normalize(text)
     return text
 end
 
--- Same as normalize, built once per hint so we don't redo it on every lookup.
+-- The hints and clues normalized once at load, so lookups don't redo it.
 -- hintIndex["north as the crow flies from seers' village"] = { "East of ...", ... }
+-- clues = { { name = "West of Falador", clue = "to the west of falador, beside the mine" }, ... }
 local hintIndex = {}
 for _, entry in ipairs(hints.list) do
     hintIndex[normalize(entry.hint)] = entry.locations
+end
+local clues = {}
+for _, place in ipairs(hints.locations) do
+    clues[#clues + 1] = { name = place.name, clue = normalize(place.clue) }
 end
 
 -- The possible locations for a hint, as a list of names (empty if we don't
@@ -57,9 +62,9 @@ function location.forClue(clue)
         return nil
     end
     local text = normalize(clue)
-    for _, place in ipairs(hints.locations) do
-        if string.find(text, normalize(place.clue), 1, true) then
-            return place.name
+    for _, entry in ipairs(clues) do
+        if string.find(text, entry.clue, 1, true) then
+            return entry.name
         end
     end
     return nil
@@ -82,23 +87,21 @@ function location.forTile(x, z)
     return bestName
 end
 
--- Where a world record's tree is. Returns two values:
---   name        the location, if we know exactly where (else nil)
---   candidates  a list of the possible locations: just { name } when we
---               know exactly, the hint's locations when we don't, or {}
--- Example: local name, candidates = location.forRecord(record)
+-- Where a world record's tree is, if we know exactly: the tile, else the
+-- clue, else a hint that can only mean one place. nil if we don't know.
+-- (For "one of these places", ask forHint.)
 function location.forRecord(record)
     local name = location.forTile(record.tileX, record.tileZ)
         or location.forClue(record.locationClue)
     -- ("a or b" gives a unless it's nil, like a ?? b in JS.)
     if name ~= nil then
-        return name, { name }
+        return name
     end
     local candidates = location.forHint(record.hint)
     if #candidates == 1 then            -- # is the length of a list, like .length
-        return candidates[1], candidates
+        return candidates[1]
     end
-    return nil, candidates
+    return nil
 end
 
 return location

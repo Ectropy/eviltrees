@@ -147,11 +147,4 @@ hints.list = {
       locations = { "North of Amberfell" } },
 }
 
--- byName["West of Falador"] gives that location's entry (or nil).
--- Like new Map(locations.map(l => [l.name, l])) in JS.
-hints.byName = {}
-for _, place in ipairs(hints.locations) do
-    hints.byName[place.name] = place
-end
-
 return hints

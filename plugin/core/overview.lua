@@ -85,10 +85,11 @@ end
 -- Where the tree is (or will be): the exact place if we know it, else the
 -- places the hint can mean, else the hint itself. nil if we know nothing.
 local function describePlace(record)
-    local name, candidates = location.forRecord(record)
+    local name = location.forRecord(record)
     if name ~= nil then
         return name
     end
+    local candidates = location.forHint(record.hint)
     if #candidates == 2 or #candidates == 3 then
         return table.concat(candidates, " or ")     -- like candidates.join(" or ")
     end

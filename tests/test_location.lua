@@ -17,13 +17,17 @@ end
 
 ---------------------------------------------------------------- D: the data itself
 check("D1 location count", #hints.locations, 27)
+
+-- byName["West of Falador"] = that location's entry, like a JS Map by name.
+local byName = {}
+for _, place in ipairs(hints.locations) do byName[place.name] = place end
 check("D2 hint count", #hints.list, 20)
 
 -- Every location named by a hint exists, and every location is named by a hint.
 local used = {}
 for _, entry in ipairs(hints.list) do
   for _, name in ipairs(entry.locations) do
-    check("D3 hint '" .. entry.hint .. "' names a known place: " .. name, hints.byName[name] ~= nil, true)
+    check("D3 hint '" .. entry.hint .. "' names a known place: " .. name, byName[name] ~= nil, true)
     used[name] = true
   end
 end
@@ -33,7 +37,7 @@ for _, place in ipairs(hints.locations) do
 end
 check("D6 no duplicate names", #hints.locations, (function()
   local n = 0
-  for _ in pairs(hints.byName) do n = n + 1 end
+  for _ in pairs(byName) do n = n + 1 end
   return n
 end)())
 
@@ -99,14 +103,11 @@ check("T4 too far from any pin", location.forTile(3200, 3200), nil)
 check("T5 nil tile", location.forTile(nil, nil), nil)
 
 ---------------------------------------------------------------- R: a whole record
-local name, candidates = location.forRecord({ status = "none" })
-check("R1 nothing known", name, nil)
-check("R1 no candidates", #candidates, 0)
+check("R1 nothing known", location.forRecord({ status = "none" }), nil)
+check("R2 two-place hint: no name",
+  location.forRecord({ status = "none", hint = "north as the crow flies from Seers' Village" }), nil)
 
-name, candidates = location.forRecord({ status = "none", hint = "north as the crow flies from Seers' Village" })
-check("R2 two-place hint: no name", name, nil)
-check("R2 two candidates", #candidates, 2)
-
+local name
 name = location.forRecord({ status = "none", hint = "Due west of the town you call Lumbridge" })
 check("R3 one-place hint gives the name", name, "South of Draynor Village, near the willow trees")
 
@@ -114,10 +115,9 @@ check("R3 one-place hint gives the name", name, "South of Draynor Village, near 
 name = location.forRecord({ status = "sapling", hint = "north as the crow flies from Seers' Village",
   locationClue = "in the north of Seers' Village" })
 check("R4 clue beats hint", name, "Northwest of Seers' Village bank")
-name, candidates = location.forRecord({ status = "alive", hint = "north as the crow flies from Seers' Village",
+name = location.forRecord({ status = "alive", hint = "north as the crow flies from Seers' Village",
   locationClue = "in the north of Seers' Village", tileX = 2702, tileZ = 3640 })
 check("R5 tile beats clue", name, "East of the house portal in Rellekka")
-check("R5 one candidate", #candidates, 1)
 
 print(passes .. " passed, " .. failures .. " failed")
 if failures > 0 then error("test failures") end
