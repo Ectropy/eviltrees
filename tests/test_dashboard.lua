@@ -48,61 +48,14 @@ local function button(label)
   end
 end
 
----------------------------------------------------------------- game stubs
-local handlers, errors, saved, interfaces = {}, {}, {}, {}
-local logged = {}           -- every log line
-Event = setmetatable({}, { __index = function(_, name)
-  return { Subscribe = function(_, fn) handlers[name] = fn end }
-end })
-log = function(...)
-  local parts = {}
-  for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end
-  local line = table.concat(parts, " ")
-  logged[#logged + 1] = line
-  if string.find(line, "[error]", 1, true) then errors[#errors + 1] = line end
-end
-PersistentDB = {
-  GetInt = function(_, k) return saved[k] end,
-  GetString = function(_, k) return saved[k] end,
-  GetStructuredData = function(_, k) return saved[k] end,
-  SetInt = function(_, k, v) saved[k] = v end,
-  SetString = function(_, k, v) saved[k] = v end,
-  SetStructuredData = function(_, k, v) saved[k] = v end,
-  Delete = function(_, k) saved[k] = nil end,
-}
-Player = { IsAvailable = function() return true end }
-GameState = { GAME = 1 }
--- A float on purpose: fengari has 32-bit integers, so minutes * 60000 would
--- overflow (the real client has 64-bit integers).
-local MINUTE_NOW = 29898900.0
-var = { VarPlayer = { CLOCK_TIME_DATE_MINUTES = { value = MINUTE_NOW } } }
-LocList = { ByConfigID = function() return {} end }
-id = { Font = {}, Component = {}, StyleSheet = {} }
-ui = {
-  Interfaces = { GetComponent = function(_, i, c)
-    local text = interfaces[i .. ":" .. tostring(c)]
-    if text == nil then return nil end
-    return { content = text }
-  end },
-  AlignMode = {},
-  -- The plain debug panel's text (used when the dashboard can't draw).
-  Text = { new = function()
-    plainText = setmetatable({}, { __index = function() return function() end end })
-    return plainText
-  end },
-}
+---------------------------------------------------------------- the game
+local game = require("fakegame")   -- stubs every game global (tests/fakegame.lua)
+local handlers, errors, logged, interfaces = game.handlers, game.errors, game.logged, game.interfaces
+local logic, server = game.logic, game.server
 
 interfaces["550:48"] = "Friends List RuneScape 204"
 require("main")
 local store = require("core/store")
-
-local tick = 0
-local function logic(times)
-  for _ = 1, times do tick = tick + 1; handlers.Logic({ logicTick = tick }) end
-end
-local function server(times)
-  for _ = 1, times do handlers.ServerLogic({}) end
-end
 
 logic(1)
 server(2)                    -- reads the world
@@ -177,7 +130,7 @@ end
 check("P2 fallback announced", fellBack, true)
 logic(50)
 check("P3 plain panel shows the debug text",
-  plainText ~= nil and string.find(tostring(plainText.content), "This world:", 1, true) ~= nil, true)
+  game.lastText ~= nil and string.find(tostring(game.lastText.content), "This world:", 1, true) ~= nil, true)
 
 PluginShutdown()
 check("Z2 no further errors", #errors, 1)

@@ -57,63 +57,13 @@ check("T8 fading", last().kind, "fading")
 trees.reset()
 
 ---------------------------------------------------------------- main.lua smoke
-local handlers = {}
-local errors = {}
-local saved = {}
-local interfaces = {}   -- ["550:48"] = text
-
-Event = setmetatable({}, { __index = function(_, name)
-  return { Subscribe = function(_, fn) handlers[name] = fn end }
-end })
-log = function(...)
-  local parts = {}
-  for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end
-  local line = table.concat(parts, " ")
-  if string.find(line, "[error]", 1, true) then errors[#errors + 1] = line end
-end
-PersistentDB = {
-  GetInt = function(_, k) return saved[k] end,
-  GetString = function(_, k) return saved[k] end,
-  GetStructuredData = function(_, k) return saved[k] end,
-  SetInt = function(_, k, v) saved[k] = v end,
-  SetString = function(_, k, v) saved[k] = v end,
-  SetStructuredData = function(_, k, v) saved[k] = v end,
-  Delete = function(_, k) saved[k] = nil end,
-}
-Player = { IsAvailable = function() return true end }
-GameState = { GAME = 1 }
--- A float on purpose: fengari has 32-bit integers, so minutes * 60000 would
--- overflow (the real client has 64-bit integers).
-local MINUTE_NOW = 29898900.0
-var = { VarPlayer = { CLOCK_TIME_DATE_MINUTES = { value = MINUTE_NOW } } }
-LocList = { ByConfigID = function(locId)
-  if locId == 11393 then return { { isValid = true, coordGrid = { x = 2703, z = 3641, level = 0 } } } end
-  return {}
-end }
-id = { Font = {}, Component = {}, StyleSheet = {} }
-ui = {
-  Interfaces = { GetComponent = function(_, i, c)
-    local text = interfaces[i .. ":" .. tostring(c)]
-    if text == nil then return nil end
-    return { content = text }
-  end },
-  AlignMode = {},
-  Text = { new = function()
-    lastText = setmetatable({}, { __index = function() return function() end end })
-    return lastText
-  end },
-}
+local game = require("fakegame")   -- stubs every game global (tests/fakegame.lua)
+local handlers, errors, saved, interfaces = game.handlers, game.errors, game.saved, game.interfaces
+local logic, server, MINUTE_NOW = game.logic, game.server, game.MINUTE_NOW
+game.locs[11393] = { { isValid = true, coordGrid = { x = 2703, z = 3641, level = 0 } } }  -- sapling 3
 
 interfaces["550:48"] = "Friends List RuneScape 204"
 require("main")
-
-local tick = 0
-local function logic(times)
-  for _ = 1, times do tick = tick + 1; handlers.Logic({ logicTick = tick }) end
-end
-local function server(times)
-  for _ = 1, times do handlers.ServerLogic({}) end
-end
 
 logic(1)
 server(2)                -- reads the world, scans: finds sapling 3 at 2703,3641
@@ -137,7 +87,7 @@ check("M3 tile", store.worlds[204].tileX, 2702)
 store.worlds[205] = { status = "none", spawnAt = 1793945263552, spawnEarliest = 1793945232000, spawnLatest = 1793945283000, hint = "close to Seers" }
 handlers.ContentLayerReady({ component = {} })
 logic(50)
-local panel = lastText and lastText.content or ""
+local panel = game.lastText and game.lastText.content or ""
 check("M6 other worlds listed", string.find(panel, "W205 none | next: spawns", 1, true) ~= nil, true)
 check("M6 scouted counts beta worlds", string.find(panel, "Scouted 2 /", 1, true) ~= nil, true)
 check("M6 this world line", string.find(panel, "This world: sapling willow", 1, true) ~= nil, true)

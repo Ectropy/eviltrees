@@ -26,7 +26,11 @@ if (testFile) {
   const { lua, lauxlib, lualib, to_luastring } = require('fengari');
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
-  const setup = `package.path = ${JSON.stringify(pluginDir.replace(/\\/g, '/') + '/?.lua')}`;
+  // Modules load from the plugin folder, then the test's own folder (for
+  // shared test helpers such as fakegame.lua).
+  const testDir = path.dirname(path.resolve(testFile));
+  const luaPath = [pluginDir, testDir].map(d => d.replace(/\\/g, '/') + '/?.lua').join(';');
+  const setup = `package.path = ${JSON.stringify(luaPath)}`;
   lauxlib.luaL_dostring(L, to_luastring(setup));
   const status = lauxlib.luaL_dofile(L, to_luastring(path.resolve(testFile).replace(/\\/g, '/')));
   if (status !== lua.LUA_OK) {
