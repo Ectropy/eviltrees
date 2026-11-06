@@ -7,21 +7,25 @@
     This file only wires things together: it loads the modules, connects game
     events to them, and starts the UI. The real work lives in:
       data/worlds.lua           - list of worlds
+      data/trees.lua            - which game objects are evil trees
+      data/hints.lua            - spawn locations, hints and clues
       core/clock.lua            - wall clock (the sandbox has no os.time)
       core/store.lua            - saving / loading with PersistentDB
-      data/trees.lua            - which game objects are evil trees
       core/parser.lua           - dialogue / examine text -> facts
       core/worldstate.lua       - facts + time -> one saved record per world
+      core/location.lua         - tile / clue / hint -> where the tree is
+      core/overview.lua         - records -> what the dashboard shows
       capture/currentworld.lua  - which world we're on (friends list header)
       capture/dialogue.lua      - Spirit tree / Queen of Sunrise dialogue
       capture/examine.lua       - examine text
       capture/trees.lua         - evil tree objects near the player
       capture/lightning.lua     - lightning strikes (the "Thor" NPC)
-      ui/debugpanel.lua         - temporary text panel
+      ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
+      ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
     Status (in development): dialogue, examine text and tree objects are
     merged into saved world records (core/worldstate.lua), and timed rules
-    move them along. The debug panel shows the current world's record.
+    move them along. The dashboard shows every world we know about.
 
     Lua reminder: require("core/clock") loads core/clock.lua (path relative to
     this plugin's folder) and returns whatever that file returns, like an ES
@@ -37,6 +41,15 @@ devlog.enabled = false          -- set to true to see [clock]/[store]/[world] me
 -- in the Plugins floating window.
 local USE_RIBBON = true
 
+-- Show the debug section under the dashboard (beat, tiles, recent captures).
+local SHOW_DEBUG = true
+
+-- PrettyUI is an optional dependency (plugin.json): the client loads it first
+-- and gives it to us as the global "prettyui". If it isn't there (not
+-- installed or not enabled), reading the global just gives nil, and we fall
+-- back to the plain debug panel so the plugin still works.
+local USE_DASHBOARD = USE_RIBBON and prettyui ~= nil
+
 local safe = require("core/safe")
 local worlds = require("data/worlds")
 local clock = require("core/clock")
@@ -49,9 +62,11 @@ local dialogue = require("capture/dialogue")
 local examine = require("capture/examine")
 local trees = require("capture/trees")
 local lightning = require("capture/lightning")
+local overview = require("core/overview")
+local dashboard = require("ui/dashboard")
 local debugPanel = require("ui/debugpanel")
 
-local VERSION = "0.4.0-dev"
+local VERSION = "0.5.0-dev"
 local MAX_RECENT = 3            -- how many recent captures the debug panel lists
 local MAX_OTHER_WORLDS = 4      -- how many other worlds' records it lists
 local MS_PER_MINUTE = 60000
@@ -212,10 +227,13 @@ local function refreshPanel()
         savedText = clock.formatUtc(store.lastSavedAt) .. " UTC"
     end
 
-    -- Kept short so the recent captures fit: the panel can't scroll.
+    -- Kept short so the recent captures fit: the plain panel can't scroll.
+    -- Everything that changes every second is on line 1, which the
+    -- dashboard updates in place (see ui/dashboard.lua).
     local lines = {
-        "World " .. worldText .. "  |  " .. clock.formatUtc(clock.now()) .. " UTC (" .. clockState .. ")",
-        "v" .. VERSION .. "  |  saved " .. savedText .. "  |  prev " .. previousText,
+        "World " .. worldText .. "  |  " .. clock.formatUtc(clock.now()) .. " UTC (" .. clockState .. ")"
+            .. "  |  saved " .. savedText,
+        "v" .. VERSION .. "  |  prev " .. previousText,
         "This world: " .. shorten(describeRecord(store.worlds[currentWorld.number or -1]), 110),
         "Scouted " .. scoutedCount() .. " / " .. #worlds.list .. " worlds. Other worlds:",
     }
@@ -226,7 +244,15 @@ local function refreshPanel()
     for _, line in ipairs(recentCaptures) do
         lines[#lines + 1] = line
     end
-    debugPanel.show(lines)
+
+    if USE_DASHBOARD then
+        local now = clock.now()
+        local model = overview.build(store.worlds, currentWorld.number, now, worlds.count)
+        -- "SHOW_DEBUG and lines or nil" is Lua's SHOW_DEBUG ? lines : nil.
+        dashboard.update(model, now, SHOW_DEBUG and lines or nil)
+    else
+        debugPanel.show(lines)
+    end
 end
 
 -------------------------------------------------------------------------------
@@ -245,6 +271,15 @@ local function noteChange(changed)
     capturelog.add(line)
     devlog.print("[state]", line)
 end
+
+-- The dashboard's "Clear world" button (after the player confirms).
+dashboard.setOnClear(function(number)
+    if worldstate.clearWorld(store.worlds, number) then
+        store.markChanged()
+        addCapture("cleared W" .. number .. " (Clear world button)")
+        refreshPanel()
+    end
+end)
 
 -- Remember the latest world we were on. This is what makes the
 -- "Previous session" line work after a reload or world hop.
@@ -404,11 +439,15 @@ Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", f
     currentWorld.onGameStateChanged(event)
 end))
 
--- The debug panel.
+-- The dashboard (or the plain debug panel).
 if USE_RIBBON then
     -- Fires each time the player opens this plugin's page in the Plugins window.
     Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
-        debugPanel.attachToRibbon(event)
+        if USE_DASHBOARD then
+            dashboard.attachToRibbon(event)
+        else
+            debugPanel.attachToRibbon(event)
+        end
         refreshPanel()
     end))
 else
@@ -429,5 +468,6 @@ refreshPanel()
 function PluginShutdown()
     store.saveNow(clock.now())
     capturelog.saveIfChanged()
+    dashboard.destroy()
     debugPanel.destroy()
 end
