@@ -2,7 +2,7 @@
     ui/dashboard.lua
     ----------------
     The dashboard in the plugin's ribbon page, drawn with PrettyUI (a Plugin
-    Hub UI library, declared in plugin.json's requiredDependencies; the
+    Hub UI library, declared in plugin.json's optionalDependencies; the
     client loads it first and gives us the global "prettyui").
 
     It only puts on screen what core/overview.lua decided:
@@ -22,12 +22,20 @@
     To tell the two apart, each build remembers a "signature": all the texts
     that aren't countdowns, joined into one string. A different signature
     means rebuild.
+
+    If building fails on a page that was just opened, something is wrong
+    with PrettyUI itself (e.g. a version without a call we use), so
+    dashboard.failed becomes true and main.lua switches to the plain debug
+    panel for the rest of the session.
 ]]
 
 local safe = require("core/safe")
 local overview = require("core/overview")
 
 local dashboard = {}
+
+-- True once the dashboard couldn't be built on a freshly opened page.
+dashboard.failed = false
 
 -- Colours are 0xRRGGBBAA. PrettyUI's default body text is 0xE7D7B0FF.
 local MUTED = 0xAFA27FFF            -- secondary text: places, hints
@@ -39,6 +47,7 @@ local signature = nil       -- the signature of what's on screen now
 local countdowns = {}       -- { { text = <ui.Text>, world = 204 }, ... }
 local debugClock = nil      -- the debug section's first line, updated in place
 local onClear = nil         -- function(worldNumber), set by main.lua
+local freshParent = false   -- true from opening the page until the first build works
 
 -- Latest data from main.lua, so a freshly opened page shows it at once.
 local lastModel, lastNow, lastDebugLines = nil, nil, nil
@@ -184,11 +193,27 @@ function dashboard.update(model, now, debugLines)
     if parent == nil then
         return      -- the ribbon page hasn't been opened yet
     end
-    local ok, err = pcall(function()
-        if view == nil or signatureOf(model, now, debugLines) ~= signature then
-            rebuild(model, now, debugLines)
+    if view == nil or signatureOf(model, now, debugLines) ~= signature then
+        -- pcall(f, a, b, c) calls f(a, b, c), catching any error.
+        local ok, err = pcall(rebuild, model, now, debugLines)
+        if ok then
+            freshParent = false
             return
         end
+        log("[error] dashboard build: " .. tostring(err))
+        -- Remove whatever was half built.
+        if view ~= nil then
+            safe.try(function() view:Destroy() end)
+            view = nil
+        end
+        if freshParent then
+            dashboard.failed = true     -- main.lua falls back to the plain panel
+        end
+        parent = nil                    -- else: wait for the page to be opened again
+        return
+    end
+
+    local ok, err = pcall(function()
         -- Same layout: just tick the countdowns and the debug clock line.
         -- Use this model's rows (a new sighting can move a time by a few
         -- seconds without changing the layout), found by world number.
@@ -200,7 +225,8 @@ function dashboard.update(model, now, debugLines)
             rowsByWorld[row.world] = row
         end
         for _, entry in ipairs(countdowns) do
-            entry.text.content = overview.countdownText(rowsByWorld[entry.world], now) or ""
+            local row = rowsByWorld[entry.world]
+            entry.text.content = row and overview.countdownText(row, now) or ""
         end
         if debugClock ~= nil and debugLines ~= nil then
             debugClock.content = debugLines[1]
@@ -211,6 +237,7 @@ function dashboard.update(model, now, debugLines)
         -- Start fresh when it's opened again. Logged so we can tell if it
         -- was something else.
         log("[error] dashboard update: " .. tostring(err))
+        safe.try(function() view:Destroy() end)
         view = nil
         parent = nil
     end
@@ -224,6 +251,7 @@ function dashboard.attachToRibbon(event)
         view = nil
     end
     parent = event.component
+    freshParent = true
     if lastModel ~= nil then
         dashboard.update(lastModel, lastNow, lastDebugLines)
     end

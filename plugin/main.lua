@@ -445,7 +445,14 @@ if USE_RIBBON then
     Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
         if USE_DASHBOARD then
             dashboard.attachToRibbon(event)
-        else
+            if dashboard.failed then
+                -- PrettyUI couldn't draw on a freshly opened page: use the
+                -- plain panel for the rest of this session.
+                log("Evil Trees: the dashboard failed to draw; showing the plain panel instead.")
+                USE_DASHBOARD = false
+            end
+        end
+        if not USE_DASHBOARD then
             debugPanel.attachToRibbon(event)
         end
         refreshPanel()

@@ -50,6 +50,7 @@ end
 
 ---------------------------------------------------------------- game stubs
 local handlers, errors, saved, interfaces = {}, {}, {}, {}
+local logged = {}           -- every log line
 Event = setmetatable({}, { __index = function(_, name)
   return { Subscribe = function(_, fn) handlers[name] = fn end }
 end })
@@ -57,6 +58,7 @@ log = function(...)
   local parts = {}
   for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end
   local line = table.concat(parts, " ")
+  logged[#logged + 1] = line
   if string.find(line, "[error]", 1, true) then errors[#errors + 1] = line end
 end
 PersistentDB = {
@@ -83,7 +85,11 @@ ui = {
     return { content = text }
   end },
   AlignMode = {},
-  Text = { new = function() return setmetatable({}, { __index = function() return function() end end }) end },
+  -- The plain debug panel's text (used when the dashboard can't draw).
+  Text = { new = function()
+    plainText = setmetatable({}, { __index = function() return function() end end })
+    return plainText
+  end },
 }
 
 interfaces["550:48"] = "Friends List RuneScape 204"
@@ -155,10 +161,26 @@ check("R1 new view on reopen", #views, count + 1)
 check("R1 old one destroyed", views[count].destroyed, true)
 check("R2 content back at once", shows("W117 - No tree"), true)
 
-PluginShutdown()
-check("Z1 destroyed on shutdown", views[#views].destroyed, true)
-check("Z2 no errors", #errors, 0)
+check("Z1 no errors so far", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
+
+---------------------------------------------------------------- PrettyUI broken
+-- If the dashboard can't be built on a freshly opened page, the plain
+-- debug panel takes over for the rest of the session.
+prettyui.SimpleView.new = function() error("no SimpleView in this PrettyUI") end
+handlers.ContentLayerReady({ component = { width = 300, height = 500 } })
+check("P1 build error logged", #errors == 1 and string.find(errors[1], "dashboard build", 1, true) ~= nil, true)
+local fellBack = false
+for _, line in ipairs(logged) do
+  if string.find(line, "showing the plain panel", 1, true) then fellBack = true end
+end
+check("P2 fallback announced", fellBack, true)
+logic(50)
+check("P3 plain panel shows the debug text",
+  plainText ~= nil and string.find(tostring(plainText.content), "This world:", 1, true) ~= nil, true)
+
+PluginShutdown()
+check("Z2 no further errors", #errors, 1)
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
