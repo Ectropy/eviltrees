@@ -1,0 +1,11 @@
+{
+    "name": "Evil Trees",
+    "version": "0.1.0",
+    "contactEmailAddress": "ectropyarts@gmail.com",
+    "requiredDependencies": {},
+    "optionalDependencies": {},
+    "requiredPermissions": [],
+    "optionalPermissions": [],
+    "urls": {},
+    "hasRibbonIcon": true
+}
