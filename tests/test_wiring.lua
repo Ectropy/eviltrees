@@ -82,7 +82,9 @@ PersistentDB = {
 }
 Player = { IsAvailable = function() return true end }
 GameState = { GAME = 1 }
-local MINUTE_NOW = 29898900
+-- A float on purpose: fengari has 32-bit integers, so minutes * 60000 would
+-- overflow (the real client has 64-bit integers).
+local MINUTE_NOW = 29898900.0
 var = { VarPlayer = { CLOCK_TIME_DATE_MINUTES = { value = MINUTE_NOW } } }
 LocList = { ByConfigID = function(locId)
   if locId == 11393 then return { { isValid = true, coordGrid = { x = 2703, z = 3641, level = 0 } } } end
