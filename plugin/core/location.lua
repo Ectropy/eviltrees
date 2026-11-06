@@ -1,0 +1,104 @@
+--[[
+    core/location.lua
+    -----------------
+    Works out where a world's tree is (or will be), from what we know:
+      1. the tile we saw the tree on       -> the nearest known location
+      2. the spirit tree's clue sentence   -> the location it describes
+      3. the hint                          -> one or more possible locations
+    The first one available wins: a tree we saw beats anything we were told.
+    Pure: no game API calls. The places themselves are in data/hints.lua.
+]]
+
+local hints = require("data/hints")
+
+local location = {}
+
+-- A tree's tile is a few tiles from its location's map pin (the W204 willow
+-- was 10 tiles from the Rellekka pin). The closest two pins are about 40
+-- tiles apart, so anything within 20 tiles can only belong to one pin.
+-- Further than that, we'd rather say nothing than guess.
+location.MAX_PIN_DISTANCE = 20
+
+-- Makes two texts comparable: lower case, single spaces, no spaces or full
+-- stop at either end. "  North as the crow  flies. " -> "north as the crow flies".
+-- In Lua patterns, %s is any whitespace (like \s in regex), and "^%s*(.-)%s*$"
+-- captures everything between leading and trailing spaces (like a trim()).
+local function normalize(text)
+    text = string.lower(text)
+    text = string.gsub(text, "%s+", " ")
+    text = string.match(text, "^%s*(.-)%s*$")
+    text = string.gsub(text, "%.$", "")       -- a trailing full stop
+    return text
+end
+
+-- Same as normalize, built once per hint so we don't redo it on every lookup.
+-- hintIndex["north as the crow flies from seers' village"] = { "East of ...", ... }
+local hintIndex = {}
+for _, entry in ipairs(hints.list) do
+    hintIndex[normalize(entry.hint)] = entry.locations
+end
+
+-- The possible locations for a hint, as a list of names (empty if we don't
+-- know the hint). The hint is the part after "It can be found", as the
+-- parser captures it, e.g. "north as the crow flies from Seers' Village".
+function location.forHint(hint)
+    if hint == nil then
+        return {}
+    end
+    return hintIndex[normalize(hint)] or {}
+end
+
+-- The location a spirit tree clue describes, or nil. The clue is the part
+-- after "which has appeared", e.g. "beside the west gates of Yanille".
+-- string.find(text, part, 1, true) looks for part as plain text (the "true"
+-- turns patterns off), like text.includes(part) in JS.
+function location.forClue(clue)
+    if clue == nil then
+        return nil
+    end
+    local text = normalize(clue)
+    for _, place in ipairs(hints.locations) do
+        if string.find(text, normalize(place.clue), 1, true) then
+            return place.name
+        end
+    end
+    return nil
+end
+
+-- The location whose pin is nearest to a tile, or nil if none is within
+-- MAX_PIN_DISTANCE tiles.
+function location.forTile(x, z)
+    if x == nil or z == nil then
+        return nil
+    end
+    local bestName, bestDistance = nil, location.MAX_PIN_DISTANCE
+    for _, place in ipairs(hints.locations) do
+        -- Straight-line distance, Pythagoras: sqrt(dx^2 + dz^2). ^ is "power" in Lua.
+        local distance = math.sqrt((place.x - x) ^ 2 + (place.z - z) ^ 2)
+        if distance <= bestDistance then
+            bestName, bestDistance = place.name, distance
+        end
+    end
+    return bestName
+end
+
+-- Where a world record's tree is. Returns two values:
+--   name        the location, if we know exactly where (else nil)
+--   candidates  a list of the possible locations: just { name } when we
+--               know exactly, the hint's locations when we don't, or {}
+-- Example: local name, candidates = location.forRecord(record)
+function location.forRecord(record)
+    local name = location.forTile(record.tileX, record.tileZ)
+        or location.forClue(record.locationClue)
+    -- ("a or b" gives a unless it's nil, like a ?? b in JS.)
+    if name ~= nil then
+        return name, { name }
+    end
+    local candidates = location.forHint(record.hint)
+    if #candidates == 1 then            -- # is the length of a list, like .length
+        return candidates[1], candidates
+    end
+    return nil, candidates
+end
+
+return location
