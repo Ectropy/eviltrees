@@ -108,6 +108,10 @@ local STRIKE_1_HEALTH = 50
 local STRIKE_2_MS = 20 * MINUTE
 local STRIKE_2_HEALTH = 25
 local DEATH_MS = 30 * MINUTE
+-- The same three times as a list, so code can look up event number k:
+-- EVENT_DUE_MS[1] = first strike, [2] = second strike, [3] = death.
+-- (Lua lists start at 1, so EVENT_DUE_MS[k] matches the event number.)
+local EVENT_DUE_MS = { STRIKE_1_MS, STRIKE_2_MS, DEATH_MS }
 -- The dead trunk (rewards) stays 9:06 after death, then fades out. Seen
 -- three times to the second in the beta (W204 willow, W205 elder, W204
 -- yew, 2026-11-06/07; also the W205 oak, 9 +/- 1 min). EctoTrees uses 10.
@@ -199,6 +203,24 @@ local function forgetTree(record)
     record.status = "none"
 end
 
+-- Forgets the tree's health and where it came from. Used when health no
+-- longer means anything (the tree died, or is still a sapling), and when a
+-- guessed health is about to be replaced by something better.
+local function forgetHealth(record)
+    record.health = nil
+    record.healthSource = nil
+end
+
+-- Lowers the health to cap, if it's unknown or higher. Health only goes
+-- down during a tree's life, so a higher cap says nothing new.
+-- source is the healthSource to record (see the header).
+local function capHealth(record, cap, source)
+    if record.health == nil or record.health > cap then
+        record.health = cap
+        record.healthSource = source
+    end
+end
+
 -- A record with nothing worth keeping (no tree, no spawn time, no hint).
 local function isEmpty(record)
     return record.status == "none" and record.spawnAt == nil and record.hint == nil
@@ -284,6 +306,15 @@ local function choose(record, name, newGuess, fallback)
     record[name .. "At"] = clampTime(value, earliest, latest)
 end
 
+-- Forgets a time and its window, e.g. forgetWindow(record, "spawn") clears
+-- spawnAt, spawnEarliest, spawnLatest and spawnSource.
+local function forgetWindow(record, name)
+    record[name .. "At"] = nil
+    record[name .. "Earliest"] = nil
+    record[name .. "Latest"] = nil
+    record[name .. "Source"] = nil
+end
+
 -- "Another evil tree in approximately N minutes" -> a window for S.
 -- The game seems to round DOWN, but never shows less than 1. Seen in the beta
 -- (W204, real spawn 03:43:32): 7m21s left -> "7", 6m23s -> "6", 2m45s -> "2",
@@ -342,7 +373,7 @@ local function eventTime(record, k, latest)
     if latest and record.matureLatest ~= nil then
         mature = record.matureLatest
     end
-    local due = mature + k * STRIKE_1_MS
+    local due = mature + EVENT_DUE_MS[k]
     local width = matureWidth(record)
     local roughM = width == nil or width > EXACT_WINDOW_MS
     if record.beatMs ~= nil then
@@ -370,11 +401,11 @@ local function earliestMature(health, now)
 end
 
 -- The window for M that a strike seen at "at" gives, if it was strike k:
--- that strike lands on the first beat at or after M + 10k min. clockSlack
+-- that strike lands on the first beat at or after M + EVENT_DUE_MS[k]. clockSlack
 -- is extra room at the late end while the clock is only minute-accurate
 -- (see "secondsKnown" below).
 local function strikeWindow(k, at, clockSlack)
-    local due = at - k * STRIKE_1_MS
+    local due = at - EVENT_DUE_MS[k]
     return due - MINUTE, due + JITTER_MS + (clockSlack or 0)
 end
 
@@ -392,16 +423,17 @@ local function clockSlackFor(secondsKnown)
     return 0
 end
 
--- Health after strike k: set to 50% / 25%, or unchanged if already lower.
-local function applyStrikeHealth(record, k)
-    local cap = STRIKE_1_HEALTH
-    if k == 2 then
-        cap = STRIKE_2_HEALTH
-    end
-    if record.health == nil or record.health > cap then
-        record.health = cap
-        record.healthSource = "strike"
-    end
+-- The most health a tree can have after strike k (1 or 2): 50% or 25%.
+-- ("x and a or b" is Lua's x ? a : b.)
+local function strikeCap(k)
+    return (k == 1) and STRIKE_1_HEALTH or STRIKE_2_HEALTH
+end
+
+-- The other way round: which strike leaves the tree at this health cap
+-- (1 for 50%, 2 for 25%). Used when we watch the tree's look drop to
+-- _LVL2 / _LVL3 (the healthCap in data/trees.lua).
+local function strikeForCap(healthCap)
+    return (healthCap == STRIKE_1_HEALTH) and 1 or 2
 end
 
 -------------------------------------------------------------------------------
@@ -418,12 +450,8 @@ end
 -- Forgets what we knew about the full tree (used when it turns out to still
 -- be a sapling).
 local function forgetMature(record)
-    record.matureAt = nil
-    record.matureEarliest = nil
-    record.matureLatest = nil
-    record.matureSource = nil
-    record.health = nil
-    record.healthSource = nil
+    forgetWindow(record, "mature")
+    forgetHealth(record)
 end
 
 -- The tree is a sapling. Even nurtured, it can't be more than 5 min old
@@ -479,8 +507,7 @@ local function becomeDead(record, now)
     local deadAt = record.deadAt or now
     record.deadAt = clampTime(deadAt, now - DEAD_MS, now)
     record.status = "dead"
-    record.health = nil
-    record.healthSource = nil
+    forgetHealth(record)
 end
 
 -- We know which strike it was (k = 1 or 2) at time "at": narrow M and set
@@ -489,16 +516,15 @@ end
 local function learnStrike(record, k, at, clockSlack)
     local earliest, latest = strikeWindow(k, at, clockSlack)
     narrow(record, "mature", earliest, latest, "strike")
-    -- Best guess: M was exactly 10k minutes before the strike. Then the next
-    -- strike lands exactly 10 min after this one, on the same beat. (Keeping
+    -- Best guess: M was exactly EVENT_DUE_MS[k] before the strike. Then the
+    -- next event lands exactly 10 min after this one, on the same beat. (Keeping
     -- an older guess here could leave M at the window's early edge, and
     -- every later prediction a minute early.)
-    choose(record, "mature", at - k * STRIKE_1_MS)
+    choose(record, "mature", at - EVENT_DUE_MS[k])
     if record.healthSource == "strike" or record.healthSource == "timed" then
-        record.health = nil
-        record.healthSource = nil
+        forgetHealth(record)
     end
-    applyStrikeHealth(record, k)
+    capHealth(record, strikeCap(k), "strike")
 end
 
 -------------------------------------------------------------------------------
@@ -527,11 +553,7 @@ function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
         -- this dead tree's, so the record keeps it.
         if facts.rewardsWindow and record.status ~= "dead" then
             if record.status == "none" then
-                -- A spawn timer we had must be out of date.
-                record.spawnAt = nil
-                record.spawnEarliest = nil
-                record.spawnLatest = nil
-                record.spawnSource = nil
+                forgetWindow(record, "spawn")   -- a spawn timer we had must be out of date
             end
             becomeDead(record, now)
         end
@@ -640,8 +662,7 @@ function worldstate.applyStrike(worlds, world, now, secondsKnown)
             becomeAlive(record, now, record.health)
         end
         if isRecent(record.stageDropAt, now, PAIR_MS) then
-            -- ("x and a or b" is Lua's x ? a : b.)
-            learnStrike(record, (record.stageDropCap == STRIKE_1_HEALTH) and 1 or 2, now, clockSlack)
+            learnStrike(record, strikeForCap(record.stageDropCap), now, clockSlack)
         end
     end)
 end
@@ -656,14 +677,11 @@ end
 local function applyStageCap(record, cap)
     -- A sighting beats a timed guess, even if the guess was lower.
     if record.healthSource == "timed" then
-        record.health = nil
-        record.healthSource = nil
+        forgetHealth(record)
     end
-    -- Health only goes down during a tree's life, so keep the lowest value.
-    -- A cap of 100 says nothing new.
-    if cap < 100 and (record.health == nil or record.health > cap) then
-        record.health = cap
-        record.healthSource = "stage"
+    -- A cap of 100 (the full tree) says nothing new.
+    if cap < 100 then
+        capHealth(record, cap, "stage")
     end
 end
 
@@ -734,7 +752,7 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
                 record.stageDropAt = now
                 record.stageDropCap = info.healthCap
                 if isRecent(record.strikeSeenAt, now, PAIR_MS) then
-                    learnStrike(record, (info.healthCap == STRIKE_1_HEALTH) and 1 or 2, now, clockSlack)
+                    learnStrike(record, strikeForCap(info.healthCap), now, clockSlack)
                 end
             end
             record.treeType = info.treeType
@@ -786,15 +804,10 @@ local function runTimers(record, now)
         seedMatureFromSpawn(record)     -- also fills in records saved by older versions
     end
     if record.status == "alive" and record.matureAt ~= nil then
-        if now >= eventTime(record, 1, true)
-            and (record.health == nil or record.health > STRIKE_1_HEALTH) then
-            record.health = STRIKE_1_HEALTH
-            record.healthSource = "timed"
-        end
-        if now >= eventTime(record, 2, true)
-            and (record.health == nil or record.health > STRIKE_2_HEALTH) then
-            record.health = STRIKE_2_HEALTH
-            record.healthSource = "timed"
+        for k = 1, 2 do
+            if now >= eventTime(record, k, true) then
+                capHealth(record, strikeCap(k), "timed")
+            end
         end
         -- Death at the latest possible time, so we never kill a living tree.
         local deathAt = eventTime(record, 3, true)
@@ -806,8 +819,7 @@ local function runTimers(record, now)
         elseif now >= deathAt then
             record.status = "dead"
             record.deadAt = deathAt
-            record.health = nil
-            record.healthSource = nil
+            forgetHealth(record)
         end
     end
 
@@ -852,13 +864,9 @@ end
 -- to be above it (it hasn't struck yet, even if its time has passed), or
 -- "unknown" (no health: go by the time).
 local function strikeState(record, k)
-    local cap = STRIKE_1_HEALTH
-    if k == 2 then
-        cap = STRIKE_2_HEALTH
-    end
     if record.health == nil then
         return "unknown"
-    elseif record.health <= cap then
+    elseif record.health <= strikeCap(k) then
         return "done"
     end
     return "due"
