@@ -173,7 +173,8 @@ function parser.parseDialogue(speaker, text)
 end
 
 -- Reads examine text from the info box.
--- Returns { health = 25 }, { deadWithRewards = true }, or nil if not recognised.
+-- Returns { health = 25 }, { deadWithRewards = true }, { deadNoRewards = true },
+-- or nil if not recognised.
 function parser.parseExamine(text)
     if text == nil then
         return nil
@@ -186,6 +187,13 @@ function parser.parseExamine(text)
     -- Examining the dead trunk: "Looks like there's rewards to be had!"
     if string.find(text, "rewards to be had", 1, true) then
         return { deadWithRewards = true }
+    end
+    -- The same trunk once your rewards are gone (seen W205, 2026-11-06):
+    -- "It looks better dead than alive." This wording may be shared with
+    -- other dead things, so worldstate ignores it; it's only recognised
+    -- to keep the capture log readable.
+    if string.find(text, "It looks better dead than alive", 1, true) then
+        return { deadNoRewards = true }
     end
     return nil
 end

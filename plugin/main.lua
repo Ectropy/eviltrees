@@ -343,6 +343,8 @@ examine.setOnText(function(text)
         addCapture("examine: health " .. facts.health .. "%", text)
     elseif facts ~= nil and facts.deadWithRewards then
         addCapture("examine: dead tree with rewards", text)
+    elseif facts ~= nil and facts.deadNoRewards then
+        addCapture("examine: dead tree, no rewards (left)", text)
     else
         addCapture("examine (unrecognised): '" .. shorten(text, 40) .. "'", text)
     end

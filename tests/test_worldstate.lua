@@ -570,5 +570,12 @@ ws.applyDialogue(WK2, 1, { timerMs = 15 * 60000 }, t("10:01:00"), true)
 local _, _, apK3 = ws.nextEvent(WK2[1], t("10:01:00"))
 check("K3 synced reading makes it exact again", apK3, false)
 
+---------------------------------------------------------------- E: dead trunk examines (W205 elder, 2026-11-06)
+check("E1 rewards", (parser.parseExamine("Looks like there's rewards to be had!") or {}).deadWithRewards, true)
+local e2 = parser.parseExamine("It looks better dead than alive.")
+check("E2 no rewards recognised", e2 and e2.deadNoRewards, true)
+local WE = { [1] = { status = "alive", treeType = "elder", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00") } }
+check("E3 no-rewards text changes nothing", ws.applyExamine(WE, 1, e2, t("10:05:00")), false)
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
