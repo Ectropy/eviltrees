@@ -499,12 +499,27 @@ check("G4 next", l4, "lightning")
 checkTime("G4 next strike exactly 10 min later", a4, "02:43:37")
 check("G4 exact", ap4, false)
 
--- Seen health > 50% means strike 1 is still to come, even if its time
--- has passed: never skip ahead to strike 2.
+-- Once strike 1's time has passed, the next event is strike 2, even if we
+-- last saw health above 50% and never saw strike 1 land (decided
+-- 2026-11-07: a countdown stuck at 0:00 looks like a bug).
 local WG5 = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00"), health = 100, healthSource = "examine" } }
-local l5, a5 = ws.nextEvent(WG5[1], t("10:10:30"))
-check("G5 overdue strike 1 still next", l5, "lightning")
+local l5, a5 = ws.nextEvent(WG5[1], t("10:09:59"))
+check("G5 strike 1 before its time", l5, "lightning")
 checkTime("G5 strike 1 time", a5, "10:10:00")
+l5, a5 = ws.nextEvent(WG5[1], t("10:10:00"))
+check("G5 at its time: moves on", l5, "lightning")
+checkTime("G5 to strike 2", a5, "10:20:00")
+l5, a5 = ws.nextEvent(WG5[1], t("10:20:00"))
+check("G5 past strike 2: death", l5, "dies by")
+checkTime("G5 death time", a5, "10:30:00")
+-- Death too: a rough-ish but trusted M (1 min window) dies at the best
+-- guess, not the latest.
+local WG5b = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:00:30"), matureEarliest = t("10:00:00"), matureLatest = t("10:01:00") } }
+local l5b, a5b = ws.nextEvent(WG5b[1], t("10:25:00"))
+checkTime("G5b dies at the best guess", a5b, "10:30:30")
+ws.tick(WG5b, t("10:30:30"), nil)
+check("G5b dead at the best guess", WG5b[1].status, "dead")
+checkTime("G5b deadAt", WG5b[1].deadAt, "10:30:30")
 
 -- A spawn timer, then the crown: assumed unnurtured, M = S + 5, so the
 -- window for M is the timer's 1 min window moved 5 min on. A 1 min window
@@ -520,12 +535,13 @@ local l6, a6, ap6 = ws.nextEvent(WG6[1], t("10:14:00"))
 check("G6 lightning from timer", l6, "lightning")
 checkTime("G6 guess S + 15", a6, "10:22:30")
 check("G6 exact (1 min window)", ap6, false)
--- the guessed strike time passing doesn't stamp a health; certainty does
--- (latest M 10:13:00 + 10 min)
-ws.tick(WG6, t("10:22:59"), nil)
-check("G6b no health at the guessed time", WG6[1].health, nil)
-ws.tick(WG6, t("10:23:00"), nil)
-check("G6b at most 50% once certain", WG6[1].health, 50)
+-- M is trusted, so health is capped at the guessed strike time (the same
+-- moment the countdown reaches 0:00), not the latest
+ws.tick(WG6, t("10:22:29"), nil)
+check("G6b no health before the guess", WG6[1].health, nil)
+ws.tick(WG6, t("10:22:30"), nil)
+check("G6b at most 50% at the guess", WG6[1].health, 50)
+check("G6b timed", WG6[1].healthSource, "timed")
 
 -- Same timer, but the crown says "tree" before S + 5: it was nurtured. The
 -- unnurtured guess is dropped; M lies between the earliest S and now.

@@ -360,10 +360,11 @@ local function matureTrusted(record)
 end
 
 -- When event number k happens (1 = first strike, 2 = second, 3 = death).
---   latest = false: our best guess, from matureAt.
---   latest = true:  the LATEST it can happen, from matureLatest. Used for
---                   "it has certainly happened by now" (timed health, timed
---                   death) and "dies by".
+--   latest = false: our best guess, from matureAt. Used for everything
+--                   while M is trusted (decided 2026-11-07: moving on a
+--                   little early is fine, a countdown stuck at 0:00 isn't).
+--   latest = true:  the LATEST it can happen, from matureLatest. Used only
+--                   while M is NOT trusted ("dies within").
 -- Events come exactly M + 10/20/30 min after the tree matured (seen to the
 -- second in the beta, see research/evil-tree-locs.md).
 -- Returns the time, and true if it's approximate (could be off by a minute
@@ -846,21 +847,27 @@ local function runTimers(record, now)
         record.status = "alive"
     end
 
-    -- 3. Lightning caps at M + 10 and M + 20, then death at M + 30. Each
-    --    only once it has CERTAINLY happened (eventTime(..., true) is the
-    --    latest it can be), so a rough M never produces a health number.
+    -- 3. Lightning caps at M + 10 and M + 20, then death at M + 30.
+    --    - M trusted: at our best guess, the same moment the dashboard's
+    --      countdown reaches 0:00, so it moves straight on to the next
+    --      event. If the guess is a little early, so be it.
+    --    - M rough ("dies within"): only once it has CERTAINLY happened
+    --      (the latest it can be). Its best guess could be anywhere in a
+    --      half-hour window, and no lightning countdown is shown for it.
+    --    useLatest is "not trusted": eventTime(record, k, useLatest).
     if record.status == "alive" then
         seedMatureFromSpawn(record)     -- also fills in records saved by older versions
     end
     if record.status == "alive" and record.matureAt ~= nil then
+        local trusted = matureTrusted(record)
+        local useLatest = not trusted
         for k = 1, 2 do
-            if now >= eventTime(record, k, true) then
+            if now >= eventTime(record, k, useLatest) then
                 capHealth(record, strikeCap(k), "timed")
             end
         end
-        -- Death at the latest possible time, so we never kill a living tree.
-        local deathAt = eventTime(record, 3, true)
-        if now >= deathAt and not matureTrusted(record) then
+        local deathAt = eventTime(record, 3, useLatest)
+        if now >= deathAt and not trusted then
             -- It's certainly dead, but it may have died up to half an hour
             -- ago and its rewards may be long gone. "Dead, rewards for 10
             -- more minutes" would be a guess shown as a fact, so forget it.
@@ -949,14 +956,16 @@ function worldstate.nextEvent(record, now)
         if now ~= nil then
             for k = 1, 2 do
                 local at, approximate = eventTime(record, k, false)
-                local state = strikeState(record, k)
-                -- "due" while overdue: the countdown shows 0:00 until it lands.
-                if state == "due" or (state == "unknown" and now < at) then
+                -- Once a strike's time has passed we move on to the next
+                -- event, even if we didn't see it land (a countdown stuck
+                -- at 0:00 looks like a bug). A strike already "done"
+                -- (health at or below its threshold) is skipped too.
+                if now < at and strikeState(record, k) ~= "done" then
                     return "lightning", at, approximate
                 end
             end
         end
-        local at, approximate = eventTime(record, 3, true)
+        local at, approximate = eventTime(record, 3, false)
         return "dies by", at, approximate
     elseif record.status == "dead" and record.deadAt ~= nil then
         return "gone by", record.deadAt + DEAD_MS, false
