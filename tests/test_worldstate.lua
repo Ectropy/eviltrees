@@ -103,7 +103,6 @@ loc("seen", SAP(4), SAP(3), "03:46:32", 2702, 3640)
 check("A8 tile moved", W[204].tileX, 2702)
 loc("seen", SAP(5), SAP(4), "03:47:32", 2702, 3640)
 checkTime("A8 step 4->5", W[204].spawnAt, "03:43:32")
-check("A8 beat from two steps a minute apart", W[204].beatMs, 32000)
 check("A8 source: watched step", W[204].spawnSource, "step")
 
 check("A8b timers paused in view", ws.tick(W, t("03:48:40"), 204), false)
@@ -121,11 +120,13 @@ checkTime("A9 M seen exactly", W[204].matureAt, "03:48:13")
 check("A9 M source", W[204].matureSource, "watched")
 local label9, at9, approx9 = ws.nextEvent(W[204], t("03:48:20"))
 check("A9 next", label9, "lightning")
-checkTime("A9 predicts the real first strike", at9, "03:58:32")
-check("A9 exact (beat known)", approx9, false)
+-- M + 10 from the watched M. The real strike came 19 s later (03:58:32):
+-- this willow is the one unexplained case; early is the safe side.
+checkTime("A9 predicts strike 1 at M + 10", at9, "03:58:13")
+check("A9 exact (M seen)", approx9, false)
 label9, at9 = ws.nextEvent(W[204])                  -- no clock: just the death
 check("A9 death label", label9, "dies by")
-checkTime("A9 predicts the real death", at9, "04:18:32")
+checkTime("A9 predicts death at M + 30", at9, "04:18:13")
 
 say("(message box)", "Nasty spirits have got at a willow tree. It can be found north as the crow flies from Seers' Village.", "03:48:40")
 checkTime("A9b helm mature keeps spawn", W[204].spawnAt, "03:43:32")
@@ -139,14 +140,16 @@ ws.applyStrike(W, 204, t("03:58:32"))                -- first lightning (Thor)
 loc("seen", WILLOW2, WILLOW, "03:58:32", 2702, 3640)  -- ...and the drop to LVL2
 check("A11 health", W[204].health, 50)
 check("A11 src", W[204].healthSource, "strike")
-checkTime("A11 M kept", W[204].matureAt, "03:48:13")
-check("A11 strike didn't narrow a watched M: source kept", W[204].matureSource, "watched")
+-- the strike gives M to the second (strike 1 = M + 10), which corrects the
+-- watched M, so the next strike and the death are predicted exactly
+checkTime("A11 M corrected by the strike", W[204].matureAt, "03:48:32")
+check("A11 M source", W[204].matureSource, "strike")
 local label11, at11 = ws.nextEvent(W[204], t("03:59:00"))
-checkTime("A11 next strike", at11, "04:08:32")
+checkTime("A11 next strike (the real one)", at11, "04:08:32")
 ws.applyStrike(W, 204, t("04:08:32"))                -- second lightning
 loc("seen", WILLOW3, WILLOW2, "04:08:32", 2702, 3640)
 check("A11b health", W[204].health, 25)
-checkTime("A11b M kept", W[204].matureAt, "03:48:13")
+checkTime("A11b M kept", W[204].matureAt, "03:48:32")
 
 ws.applyExamine(W, 204, { health = 20 }, t("04:10:00"))
 loc("seen", WILLOW3, nil, "04:10:05", 2702, 3640)
@@ -154,7 +157,7 @@ check("A11c keeps lower examine", W[204].health, 20)
 
 -- died untouched at M + 30: the killing strike, then the dying loc
 ws.applyStrike(W, 204, t("04:18:32"))
-checkTime("A12 kill strike leaves M alone", W[204].matureAt, "03:48:13")
+checkTime("A12 kill strike leaves M alone", W[204].matureAt, "03:48:32")
 loc("seen", WILLOW_DYING, WILLOW3, "04:18:32", 2702, 3640)
 check("A13 dead", W[204].status, "dead")
 checkTime("A13 deadAt", W[204].deadAt, "04:18:32")
@@ -193,14 +196,14 @@ checkTime("N5 kept inside timer window", WN2[2].spawnAt, "10:00:30")
 ws.applyTreeLoc(WN2, 2, "seen", OAK, 1, 1, SAP(5), t("10:03:00"))      -- matured fast
 checkTime("N6 kept inside timer window", WN2[2].spawnAt, "10:00:30")
 
----------------------------------------------------------------- L: lightning, beat, chopping
--- An alive oak with a known mature time M (exact) and, optionally, a beat.
-local function aliveTree(m, beat)
-  return { status = "alive", treeType = "oak", matureAt = m, matureEarliest = m, matureLatest = m, beatMs = beat }
+---------------------------------------------------------------- L: lightning, chopping
+-- An alive oak with a known mature time M (exact).
+local function aliveTree(m)
+  return { status = "alive", treeType = "oak", matureAt = m, matureEarliest = m, matureLatest = m }
 end
 
--- timed lightning while away, on the beat (:00)
-local WT = { [1] = aliveTree(t("03:05:00"), 0) }
+-- timed lightning while away, exactly at M + 10 / M + 20
+local WT = { [1] = aliveTree(t("03:05:00")) }
 ws.tick(WT, t("03:14:59"), nil)
 check("L1 no lightning yet", WT[1].health, nil)
 ws.tick(WT, t("03:15:00"), nil)
@@ -213,39 +216,29 @@ check("L2 stage beats a timed guess", WT[1].health, 50)
 check("L2 stage src", WT[1].healthSource, "stage")
 
 -- full tree seen while we had a 50% guess: guess dropped, and M is less
--- than ~11 min ago (it hasn't been struck)
+-- than 10 min ago (it hasn't been struck)
 local W2 = { [1] = { status = "alive", treeType = "oak", matureAt = t("02:45:00"), matureEarliest = t("02:40:00"), matureLatest = t("03:00:00"), health = 50, healthSource = "timed" } }
 ws.applyTreeLoc(W2, 1, "seen", OAK, 1, 1, nil, t("03:12:00"))
 check("L3 full beats guess", W2[1].health, nil)
-checkTime("L3 M pulled into the new window", W2[1].matureAt, "03:01:00")
+checkTime("L3 M pulled into the new window", W2[1].matureAt, "03:01:58")
 
 -- chopped to LVL2 / LVL3 with no strike: says nothing about M
-local WC2 = { [1] = aliveTree(t("03:05:00"), 0) }
+local WC2 = { [1] = aliveTree(t("03:05:00")) }
 ws.applyTreeLoc(WC2, 1, "seen", OAK2, 1, 1, OAK, t("03:08:00"))
 checkTime("L4 chop keeps M", WC2[1].matureAt, "03:05:00")
 ws.applyTreeLoc(WC2, 1, "seen", OAK3, 1, 1, OAK2, t("03:10:00"))
 checkTime("L4 chop again keeps M", WC2[1].matureAt, "03:05:00")
 
--- unfelled death at exactly M+30, with or without a known beat
-local WK = { [1] = aliveTree(t("03:05:00"), 0) }
+-- unfelled death at exactly M+30
+local WK = { [1] = aliveTree(t("03:05:00")) }
+ws.tick(WK, t("03:34:59"), nil)
+check("L5 not killed early", WK[1].status, "alive")
 ws.tick(WK, t("03:35:00"), nil)
 check("L5 dies at M+30", WK[1].status, "dead")
 checkTime("L5 deadAt", WK[1].deadAt, "03:35:00")
-local WK2 = { [1] = aliveTree(t("03:05:00"), nil) }
-ws.tick(WK2, t("03:34:59"), nil)
-check("L5b no beat: not killed early", WK2[1].status, "alive")
-ws.tick(WK2, t("03:35:00"), nil)
-check("L5b no beat: dead at M+30", WK2[1].status, "dead")
 
--- jitter: M seen 0.4 s after the beat must not push strike 1 a minute late
-local WJ1 = { [1] = aliveTree(t("10:05:00") + 400, 0) }
-local lj, aj, approxJ = ws.nextEvent(WJ1[1], t("10:06:00"))
-check("L6 next is lightning", lj, "lightning")
-checkTime("L6 on the beat, not a minute late", aj, "10:15:00")
-check("L6 exact", approxJ, false)
-
--- unknown beat but M known to the second: exactly M+10 / M+30
-local WU = { [1] = aliveTree(t("10:05:00"), nil) }
+-- M known to the second: exactly M+10 / M+30
+local WU = { [1] = aliveTree(t("10:05:00")) }
 local lu, au, approxU = ws.nextEvent(WU[1], t("10:06:00"))
 checkTime("L7 lightning M+10", au, "10:15:00")
 check("L7 exact", approxU, false)
@@ -255,7 +248,7 @@ checkTime("L7 dies at M+30", au, "10:35:00")
 
 -- Strikes only hit a tree above the threshold. Chopped to 45% before
 -- strike 1: strike 1 never comes, the next lightning is strike 2 at M+20.
-local WCH = { [1] = aliveTree(t("10:05:00"), 0) }
+local WCH = { [1] = aliveTree(t("10:05:00")) }
 ws.applyExamine(WCH, 1, { health = 45 }, t("10:10:00"))
 local lc, ac = ws.nextEvent(WCH[1], t("10:11:00"))
 check("L8 next skips strike 1", lc, "lightning")
@@ -271,16 +264,14 @@ local WTD = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:16:00
 ws.applyStrike(WTD, 1, t("10:35:00"))
 checkTime("L9 no guess from the strike alone", WTD[1].matureEarliest, "10:00:00")
 ws.applyTreeLoc(WTD, 1, "seen", OAK2, 1, 1, OAK, t("10:35:01"))
-checkTime("L9 corrected to strike 1", WTD[1].matureEarliest, "10:24:01")
+checkTime("L9 corrected to strike 1", WTD[1].matureAt, "10:25:01")
 check("L9 health from strike 1", WTD[1].health, 50)
-check("L9 beat", WTD[1].beatMs, 0)
 
 -- drop first, then Thor
 local WDT = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:16:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:30:00") } }
 ws.applyTreeLoc(WDT, 1, "seen", OAK2, 1, 1, OAK, t("10:35:00"))
 ws.applyStrike(WDT, 1, t("10:35:00") + 500)
-checkTime("L10 strike 1 from the drop", WDT[1].matureEarliest, "10:24:00")
-check("L10 beat to the ms", WDT[1].beatMs, 500)
+checkTime("L10 strike 1 from the drop", WDT[1].matureAt, "10:25:00")
 
 -- a strike on an LVL3 tree that survives must not be read as the kill
 local WS = {}
@@ -302,25 +293,19 @@ ws.applyStrike(WO, 205, t("04:43:15"))
 ws.applyTreeLoc(WO, 205, "seen", trees.byId[11926], 3096, 3227, OAK3, t("04:43:16"))
 check("L12 dead", WO[205].status, "dead")
 checkTime("L12 deadAt", WO[205].deadAt, "04:43:16")
-check("L12 beat :15", WO[205].beatMs, 15000)
 
 -- a kill strike that fits neither strike 1 nor 2 leaves M alone
-local WKS = { [1] = aliveTree(t("10:05:00"), 0) }
+local WKS = { [1] = aliveTree(t("10:05:00")) }
 ws.applyStrike(WKS, 1, t("10:35:00"))
 checkTime("L13 M untouched", WKS[1].matureAt, "10:05:00")
 check("L13 health untouched", WKS[1].health, nil)
 
--- clock only minute-accurate (just after start-up): no beat, M still narrowed
-local WNS = { [1] = aliveTree(t("10:05:00"), nil) }
+-- clock only minute-accurate (just after start-up): M still narrowed
+local WNS = { [1] = aliveTree(t("10:05:00")) }
 ws.applyStrike(WNS, 1, t("10:14:40"), false)       -- clock 20 s behind the real 10:15:00
 ws.applyTreeLoc(WNS, 1, "seen", OAK2, 1, 1, OAK, t("10:14:40"), false)
-check("L15 no beat while unsynced", WNS[1].beatMs, nil)
 check("L15 health still set", WNS[1].health, 50)
 checkTime("L15 M kept (inside the widened window)", WNS[1].matureAt, "10:05:00")
-local WNS2 = {}
-ws.applyTreeLoc(WNS2, 1, "seen", SAP(2), 1, 1, SAP(1), t("10:01:00"), false)
-ws.applyTreeLoc(WNS2, 1, "seen", SAP(3), 1, 1, SAP(2), t("10:02:00"), false)
-check("L15b no beat from steps while unsynced", WNS2[1].beatMs, nil)
 
 -- a record saved by an older version (spawn time only) doesn't break a strike
 local WOLD = { [1] = { status = "alive", treeType = "oak", spawnAt = t("10:00:00") } }
@@ -362,7 +347,7 @@ local WD = { [3] = { status = "dead", treeType = "oak", deadAt = t("02:00:00") }
 ws.applyTreeLoc(WD, 3, "seen", OAK, 1, 1, nil, t("02:01:00"))
 check("C3 alive again", WD[3].status, "alive")
 check("C3 deadAt cleared", WD[3].deadAt, nil)
-checkTime("C3 M middle of window", WD[3].matureAt, "01:55:30")
+checkTime("C3 M middle of window", WD[3].matureAt, "01:55:59")
 
 -- first sight of stage 3, no other info: S 0..3 min ago, guess 2m30s
 local WE = {}
@@ -516,7 +501,7 @@ check("G4 exact", ap4, false)
 
 -- Seen health > 50% means strike 1 is still to come, even if its time
 -- has passed: never skip ahead to strike 2.
-local WG5 = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00"), beatMs = 0, health = 100, healthSource = "examine" } }
+local WG5 = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00"), health = 100, healthSource = "examine" } }
 local l5, a5 = ws.nextEvent(WG5[1], t("10:10:30"))
 check("G5 overdue strike 1 still next", l5, "lightning")
 checkTime("G5 strike 1 time", a5, "10:10:00")

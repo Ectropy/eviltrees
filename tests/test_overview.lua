@@ -29,7 +29,7 @@ local worlds = {
   -- Current world: alive willow, examined at 45%, seen at its tile.
   [204] = { status = "alive", treeType = "willow", health = 45, healthSource = "examine",
             matureAt = NOW - 5 * MINUTE, matureEarliest = NOW - 5 * MINUTE, matureLatest = NOW - 5 * MINUTE,
-            beatMs = 32000, tileX = 2702, tileZ = 3640 },
+            tileX = 2702, tileZ = 3640 },
   -- Spawns in 30 min, two-place hint.
   [117] = { status = "none", spawnAt = NOW + 30 * MINUTE,
             hint = "north as the crow flies from Seers' Village" },
@@ -111,11 +111,10 @@ check("H4 timed (float): at most", heading(alive), "W1 - Evil tree - <=25%")
 check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "W1 - Magic sapling")
 check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "W1 - Evil tree")
 
--- M known to the second: exact, even without a beat (events are exactly
--- M + 10/20/30). M only known within a few minutes: approximate, "~".
+-- M known to the second: exact (events are exactly M + 10/20/30). M only known within a few minutes: approximate, "~".
 local M = NOW - MINUTE
 local row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M, matureLatest = M } }, 1, NOW, 137).current
-check("H7 exact M, no beat", overview.countdownText(row, NOW), "Lightning in 9:00")
+check("H7 exact M", overview.countdownText(row, NOW), "Lightning in 9:00")
 row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M - 2 * MINUTE, matureLatest = M } }, 1, NOW, 137).current
 check("H7b rough M is approximate", overview.countdownText(row, NOW), "Lightning in ~9:00")
 

@@ -26,14 +26,10 @@
                       "fromSpawn" (S + 5, assuming no nurturing) | "health"
                       (at or below 50% / 25%: strike 1 / 2 assumed done) |
                       "alive" (only seen or told that it's a full tree)
-        beatMs        the tree's once-a-minute "beat": the strikes and the
-                      death happen at this many ms past a whole minute
-                      (e.g. 32000 = at :32). nil until we know it.
         strikeSeenAt  when we last saw a lightning strike (Thor)
         stageDropAt, stageDropCap
                       when we last watched the health stage drop, and to
                       which cap (50 or 25); pairs a drop with a strike
-        stepSeenAt    when we last watched a sapling stage step
         treeType      "tree" | "oak" | "willow" | "maple" | "yew" | "magic" | "elder"
         hint          "north as the crow flies from Seers' Village"
         locationClue  the spirit tree's "which has appeared ..." sentence
@@ -52,8 +48,8 @@
       - S: sapling stage 1. Without nurturing, a new stage every 60 s and
         a full tree at S + 5 min. Nurturing makes it all happen sooner.
       - M: full tree. Lightning at exactly M + 10 and M + 20 min, death at
-        exactly M + 30 (to the second, even when nurturing moved M). So the
-        strikes and the death share M's second past the minute: the "beat".
+        exactly M + 30 (to the second, even when nurturing moved M). Nothing
+        is tied to the clock's whole minutes: times follow from S and M.
       - Dead trunk (rewards) for 9:06 after death, then it fades out.
 
     The rule everything follows: SOMETHING SEEN BEATS A TIMED GUESS.
@@ -64,8 +60,8 @@
         only inside the window.
       - From S we assume the sapling is NOT nurtured: M = S + 5 min. At
         worst it grew up sooner, and a sighting corrects that.
-      - A lightning strike we see (the NPC "Thor" at the tree) pins the beat
-        to the second, and tells us M to within a minute.
+      - A lightning strike we see (the NPC "Thor" at the tree), once we
+        know which strike it was, gives M to the second.
       - Strikes only happen to a tree that is still ABOVE the threshold:
         strike 1 only above 50%, strike 2 only above 25%. They make sure a
         tree nobody chops still dies on time. So a strike always changes
@@ -107,7 +103,7 @@ local MINUTE = 60 * SECOND
 local SAPLING_STAGE_MS = 60 * SECOND
 local SAPLING_MATURE_MS = 5 * MINUTE
 -- After maturing: lightning at M + 10 (health to 50%) and M + 20 (to 25%),
--- death at M + 30 (the third strike), each on the next beat.
+-- death at M + 30 (the third strike), each to the second.
 local STRIKE_1_MS = 10 * MINUTE
 local STRIKE_1_HEALTH = 50
 local STRIKE_2_MS = 20 * MINUTE
@@ -122,23 +118,22 @@ local EVENT_DUE_MS = { STRIKE_1_MS, STRIKE_2_MS, DEATH_MS }
 -- yew, 2026-11-06/07; also the W205 oak, 9 +/- 1 min). EctoTrees uses 10.
 local DEAD_MS = 9 * MINUTE + 6 * SECOND
 -- Events reach us on server ticks (0.6 s), so a time we saw can be up to
--- about a second late. Rounding to the beat allows this much slack, so a
--- slightly late M doesn't push a prediction a whole minute later.
+-- about a second late. Windows built from a sighting allow this much slack.
 local JITTER_MS = 2 * SECOND
 -- A strike and the health-stage change it causes arrive within this time.
 local PAIR_MS = 2 * SECOND
 -- How unsure we may be about M and still show lightning times: one sapling's
 -- growing time. Any window that started from a spawn time fits in it; a
 -- tree first met fully grown doesn't. The windows we get:
---   - watched it grow up, or saw a strike:          about 1 min
+--   - watched it grow up, or saw a strike:          a few seconds
 --   - a spawn timer (assumed not nurtured):         1-2 min
 --   - a timer, then found grown early (nurtured):   under 5 min (S to now)
 --   - a sapling seen or greeted, no timer:          up to 5 min
---   - "we saw it at full health":                   11 min (too wide)
---   - "the spirit tree says it's alive":            31 min (too wide)
+--   - "we saw it at full health":                   10 min (too wide)
+--   - "the spirit tree says it's alive":            30 min (too wide)
 local TRUSTED_WINDOW_MS = SAPLING_MATURE_MS
--- A window for M this narrow (a strike we saw) gives times to the second,
--- once the beat is known.
+-- A window this narrow is shown without "~": anything seen, or one "N
+-- minutes" timer reading (a 1 min window, shown as exact like EctoTrees).
 local EXACT_WINDOW_MS = MINUTE + 2 * JITTER_MS
 
 -------------------------------------------------------------------------------
@@ -197,7 +192,7 @@ local TREE_FIELDS = {
     "treeType", "hint", "locationClue", "tileX", "tileZ", "health", "healthSource",
     "spawnAt", "spawnEarliest", "spawnLatest", "spawnSource",
     "matureAt", "matureEarliest", "matureLatest", "matureSource",
-    "beatMs", "strikeSeenAt", "stageDropAt", "stageDropCap", "stepSeenAt", "deadAt",
+    "strikeSeenAt", "stageDropAt", "stageDropCap", "deadAt",
 }
 
 -- Forgets the current tree: back to "none", with no spawn time.
@@ -343,14 +338,6 @@ end
 -- The lightning schedule
 -------------------------------------------------------------------------------
 
--- The first beat at or after "due" (allowing JITTER_MS of slack).
--- The % here is Lua's remainder, which is never negative for a positive
--- divisor (unlike JS's %), so this always moves forwards, 0 to 59.999 s.
-local function nextBeat(due, beatMs)
-    local from = due - JITTER_MS
-    return from + (beatMs - from) % MINUTE
-end
-
 -- How wide the window for M is (ms), or nil if we have no window.
 local function matureWidth(record)
     if record.matureEarliest == nil or record.matureLatest == nil then
@@ -371,9 +358,7 @@ end
 --                   "it has certainly happened by now" (timed health, timed
 --                   death) and "dies by".
 -- Events come exactly M + 10/20/30 min after the tree matured (seen to the
--- second in the beta, see research/evil-tree-locs.md). If we know the beat
--- (from a strike we saw), the time is put on it, which fixes up an M that
--- was seen a second or so late.
+-- second in the beta, see research/evil-tree-locs.md).
 -- Returns the time, and true if it's approximate (could be off by a minute
 -- or more, because M is only known roughly).
 local function eventTime(record, k, latest)
@@ -384,25 +369,23 @@ local function eventTime(record, k, latest)
     local due = mature + EVENT_DUE_MS[k]
     local width = matureWidth(record)
     local roughM = width == nil or width > EXACT_WINDOW_MS
-    if record.beatMs ~= nil then
-        return nextBeat(due, record.beatMs), roughM
-    end
     return due, roughM
 end
 
 -- How long ago the tree can have matured, given its health right now.
 -- A tree with more than 50% hasn't had its first strike (M + 10) yet, so
--- it matured less than about 11 min ago; more than 25%: no second strike
--- yet. (Chopping only lowers health, so this holds whatever players did.)
+-- it matured less than 10 min ago; more than 25%: no second strike yet.
+-- (Chopping only lowers health, so this holds whatever players did.)
+-- JITTER_MS allows for seeing the health a moment late.
 -- health may be nil (unknown). Returns the earliest possible M.
 local function earliestMature(health, now)
     if health ~= nil and health > STRIKE_1_HEALTH then
-        return now - STRIKE_1_MS - MINUTE
+        return now - STRIKE_1_MS - JITTER_MS
     end
     if health ~= nil and health > STRIKE_2_HEALTH then
-        return now - STRIKE_2_MS - MINUTE
+        return now - STRIKE_2_MS - JITTER_MS
     end
-    return now - DEATH_MS - MINUTE      -- any older and it would have died
+    return now - DEATH_MS - JITTER_MS   -- any older and it would have died
 end
 
 -- The other end: how recently the tree can have matured, given its health
@@ -424,19 +407,18 @@ local function latestMature(health, now)
 end
 
 -- The window for M that a strike seen at "at" gives, if it was strike k:
--- that strike lands on the first beat at or after M + EVENT_DUE_MS[k]. clockSlack
--- is extra room at the late end while the clock is only minute-accurate
--- (see "secondsKnown" below).
+-- strike k comes exactly EVENT_DUE_MS[k] after M, and we may see it up to
+-- JITTER_MS late. clockSlack is extra room at the late end while the clock
+-- is only minute-accurate (see "secondsKnown" below).
 local function strikeWindow(k, at, clockSlack)
     local due = at - EVENT_DUE_MS[k]
-    return due - MINUTE, due + JITTER_MS + (clockSlack or 0)
+    return due - JITTER_MS, due + JITTER_MS + (clockSlack or 0)
 end
 
 -- Right after start-up the plugin's clock only knows the minute: "now" can
 -- be up to 59 s behind the real time until the minute first changes (see
 -- core/clock.lua). Functions that pin a time to the second take an optional
 -- secondsKnown argument (main.lua passes clock.isSynced()). When it's false:
---   - the beat isn't recorded (it would be wrong by up to a minute),
 --   - exact times are widened by a minute at the late end.
 -- nil counts as true, so callers (and tests) that don't care can leave it out.
 local function clockSlackFor(secondsKnown)
@@ -552,7 +534,7 @@ local function learnStrike(record, k, at, clockSlack)
     local earliest, latest = strikeWindow(k, at, clockSlack)
     narrow(record, "mature", earliest, latest, "strike")
     -- Best guess: M was exactly EVENT_DUE_MS[k] before the strike. Then the
-    -- next event lands exactly 10 min after this one, on the same beat. (Keeping
+    -- next event lands exactly 10 min after this one. (Keeping
     -- an older guess here could leave M at the window's early edge, and
     -- every later prediction a minute early.)
     choose(record, "mature", at - EVENT_DUE_MS[k])
@@ -672,7 +654,6 @@ end
 
 -- A lightning strike happened at the tree just now (capture/lightning.lua
 -- saw the "Thor" NPC).
---   - It gives the beat to the second.
 --   - Which strike was it? Only the tree's new look can tell us (see the
 --     header: a strike always changes it). That loc change arrives in the
 --     same second, before or after the strike:
@@ -683,9 +664,6 @@ end
 function worldstate.applyStrike(worlds, world, now, secondsKnown)
     local clockSlack = clockSlackFor(secondsKnown)
     return update(worlds, world, now, function(record)
-        if secondsKnown ~= false then
-            record.beatMs = now % MINUTE
-        end
         record.strikeSeenAt = now
         if record.status == "dead" and isRecent(record.deadAt, now, PAIR_MS) then
             return      -- the killing strike; the _DYING loc already arrived
@@ -761,13 +739,6 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
             if watchedChange then
                 narrow(record, "spawn", now - stageStart, now, "step")
                 choose(record, "spawn", now - stageStart)
-                -- Two watched steps a minute apart: nobody is nurturing, so
-                -- the steps are on the tree's beat.
-                if record.beatMs == nil and secondsKnown ~= false and record.stepSeenAt ~= nil
-                    and math.abs(now - record.stepSeenAt - SAPLING_STAGE_MS) <= JITTER_MS then
-                    record.beatMs = now % MINUTE
-                end
-                record.stepSeenAt = now
             else
                 narrow(record, "spawn", now - info.saplingLevel * SAPLING_STAGE_MS, now, "sapling")
                 -- Rough guess: halfway through the stage, not nurtured.

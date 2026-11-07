@@ -42,7 +42,7 @@ devlog.enabled = false          -- set to true to see [clock]/[store]/[world] me
 -- in the Plugins floating window.
 local USE_RIBBON = true
 
--- Show the debug section under the dashboard (beat, tiles, recent captures).
+-- Show the debug section under the dashboard (records, tiles, recent captures).
 local SHOW_DEBUG = true
 
 -- PrettyUI is an optional dependency (plugin.json): the client loads it first
@@ -144,9 +144,6 @@ local function describeRecord(record)
     local label, at, approximate = worldstate.nextEvent(record, clock.now())
     if label ~= nil then
         text = text .. " | next: " .. label .. " " .. (approximate and "~" or "") .. clock.formatUtc(at)
-    end
-    if record.beatMs ~= nil then
-        text = text .. " | beat :" .. string.format("%02d", record.beatMs // 1000)
     end
     -- Where the spawn (S) and maturing (M) times came from, e.g. "S timer, M strike".
     if record.spawnSource ~= nil or record.matureSource ~= nil then

@@ -125,8 +125,7 @@ check("M6 scouted counts beta worlds", string.find(panel, "Scouted 2 /", 1, true
 check("M6 this world line", string.find(panel, "This world: sapling willow", 1, true) ~= nil, true)
 
 -- lightning: Thor (NPC id 416) counts once; other NPCs are ignored.
--- First let the clock see a minute change, so it knows the seconds (the beat
--- is only recorded then).
+-- First let the clock see a minute change, so it knows the seconds.
 var.VarPlayer.CLOCK_TIME_DATE_MINUTES.value = MINUTE_NOW + 1
 server(1)
 logic(1)
@@ -137,7 +136,6 @@ check("M7 other NPC ignored", store.worlds[204].strikeSeenAt, nil)
 handlers.NPCEntityAdded(npc(416, 2))
 local firstStrike = store.worlds[204].strikeSeenAt
 check("M7 Thor = strike", firstStrike ~= nil, true)
-check("M7 beat recorded", store.worlds[204].beatMs ~= nil, true)
 logic(10)
 server(2)
 handlers.NPCEntityAdded(npc(416, 3))                -- the same strike seen again
