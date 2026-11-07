@@ -20,6 +20,7 @@
       capture/examine.lua       - examine text
       capture/trees.lua         - evil tree objects near the player
       capture/lightning.lua     - lightning strikes (the "Thor" NPC)
+      capture/chat.lua          - sapling inspect text (optional chatAccess)
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
@@ -62,6 +63,7 @@ local dialogue = require("capture/dialogue")
 local examine = require("capture/examine")
 local trees = require("capture/trees")
 local lightning = require("capture/lightning")
+local chat = require("capture/chat")
 local overview = require("core/overview")
 local dashboard = require("ui/dashboard")
 local debugPanel = require("ui/debugpanel")
@@ -218,7 +220,7 @@ local function debugLines(model)
     local lines = {
         "World " .. worldText .. "  |  " .. clock.formatUtc(clock.now()) .. " UTC (" .. clockState .. ")"
             .. "  |  saved " .. savedText,
-        "v" .. VERSION .. "  |  prev " .. previousText,
+        "v" .. VERSION .. "  |  prev " .. previousText .. "  |  chat " .. (chat.hasAccess() and "on" or "off"),
         "This world: " .. shorten(describeRecord(store.worlds[currentWorld.number or -1]), 110),
         "Scouted " .. model.scouted .. " / " .. model.total .. " worlds. Other worlds:",
     }
@@ -353,6 +355,24 @@ examine.setOnText(function(text)
     end
 end)
 
+-- A game message in the chatbox (only with the optional chatAccess
+-- permission). We only act on inspecting a sapling; every other message is
+-- ignored and never logged.
+chat.setOnText(function(text)
+    local facts = parser.parseInspect(text)
+    if facts == nil then
+        return
+    end
+    -- You can only inspect a sapling standing next to it, so it's this
+    -- world's tree. If none is in view, the message isn't about one.
+    if not trees.isTreeInView() then
+        addCapture("sapling inspect ignored (no evil tree in view)", text)
+        return
+    end
+    addCapture("sapling inspect: type " .. facts.treeType, text)
+    noteChange(worldstate.applyDialogue(store.worlds, currentWorld.number, facts, clock.now()))
+end)
+
 -- An evil tree object appeared, faded or was removed near the player.
 -- previous is set when we watched this loc replace an older stage.
 trees.setOnEvent(function(kind, info, tileX, tileZ, previous)
@@ -442,6 +462,9 @@ Event.LocAnimation.Subscribe("evilTrees", safe.handler("LocAnimation", trees.onL
 
 -- NPCs appearing: the lightning strike ("Thor").
 Event.NPCEntityAdded.Subscribe("evilTrees", safe.handler("NPCEntityAdded", lightning.onNpcAdded))
+
+-- Chatbox game messages: sapling inspect. Only fires with chatAccess.
+Event.ChatMessage.Subscribe("evilTrees", safe.handler("ChatMessage", chat.onChatMessage))
 
 -- Logging in, hopping worlds, logging out.
 Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", function(event)

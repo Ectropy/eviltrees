@@ -172,6 +172,33 @@ function parser.parseDialogue(speaker, text)
     return nil
 end
 
+-- Reads the chat message you get when you inspect a sapling (only seen with
+-- the optional chatAccess permission, see capture/chat.lua):
+--   "This sapling will grow into an Evil elder tree." (real text; capital "Evil")
+-- Returns facts shaped like the crown's "...got at a willow tree sapling",
+-- so worldstate.applyDialogue can use them unchanged:
+--   { source = "sapling inspect", treeType = "willow", isSapling = true }
+-- or nil if it isn't that message. (%a*) works as in parseDialogue: for
+-- "an evil tree" it ends up empty, which TREE_WORDS turns into "tree".
+function parser.parseInspect(text)
+    if text == nil then
+        return nil
+    end
+    -- We haven't captured this message through the chat event yet, so its
+    -- exact capitals aren't known. Matching on a lower-case copy makes the
+    -- check case-insensitive (Lua patterns have no "i" flag like JS's /.../i).
+    local lower = string.lower(text)
+    local treeWord = string.match(lower, "this sapling will grow into an? evil (%a*) ?tree")
+    if treeWord == nil or TREE_WORDS[treeWord] == nil then
+        return nil
+    end
+    return {
+        source = "sapling inspect",
+        treeType = TREE_WORDS[treeWord],
+        isSapling = true,
+    }
+end
+
 -- Reads examine text from the info box.
 -- Returns { health = 25 }, { deadWithRewards = true }, { deadNoRewards = true },
 -- or nil if not recognised.

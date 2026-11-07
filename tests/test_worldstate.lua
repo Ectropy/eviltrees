@@ -577,5 +577,22 @@ check("E2 no rewards recognised", e2 and e2.deadNoRewards, true)
 local WE = { [1] = { status = "alive", treeType = "elder", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00") } }
 check("E3 no-rewards text changes nothing", ws.applyExamine(WE, 1, e2, t("10:05:00")), false)
 
+---------------------------------------------------------------- I: sapling inspect (chat)
+local i1 = parser.parseInspect("This sapling will grow into an evil willow tree.")
+check("I1 type", i1 and i1.treeType, "willow")
+check("I1 sapling", i1 and i1.isSapling, true)
+-- the real text (W205 elder, 2026-11-06): note the capital "Evil"
+local i2 = parser.parseInspect("This sapling will grow into an Evil elder tree.")
+check("I2 elder", i2 and i2.treeType, "elder")
+local i3 = parser.parseInspect("This sapling will grow into an evil tree.")
+check("I3 plain evil tree", i3 and i3.treeType, "tree")
+check("I3b any capitals", (parser.parseInspect("THIS SAPLING WILL GROW INTO AN EVIL Magic TREE.") or {}).treeType, "magic")
+check("I4 other text", parser.parseInspect("A strange sapling emerging from the ground."), nil)
+check("I5 unknown type word", parser.parseInspect("This sapling will grow into an evil banana tree."), nil)
+-- the crown already gave a type: the same type keeps the tree
+local WI = { [1] = { status = "sapling", treeType = "elder", spawnAt = t("10:00:00"), spawnEarliest = t("09:59:00"), spawnLatest = t("10:00:30") } }
+ws.applyDialogue(WI, 1, i2, t("10:02:00"))
+checkTime("I6 same type keeps spawn", WI[1].spawnAt, "10:00:00")
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

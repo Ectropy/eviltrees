@@ -78,6 +78,17 @@ server(2)                -- reads the world, scans: finds sapling 3 at 2703,3641
 local store = require("core/store")
 check("M1 record from scan", store.worlds[204] and store.worlds[204].status, "sapling")
 
+-- chat (optional chatAccess): a player typing the text is ignored; the game's
+-- inspect message gives the sapling's type
+local INSPECT = "<col=ffffff>This sapling will grow into an evil willow tree.</col>"
+handlers.ChatMessage({ senderNameUnfiltered = "Someone", chatMessage = INSPECT })
+check("M1b player chat ignored", store.worlds[204].treeType, nil)
+handlers.ChatMessage({ senderNameUnfiltered = "", chatMessage = "Some other game message." })
+check("M1b other game text ignored", store.worlds[204].treeType, nil)
+handlers.ChatMessage({ senderNameUnfiltered = "", chatMessage = INSPECT })
+check("M1c inspect gives type", store.worlds[204].treeType, "willow")
+check("M1c still a sapling", store.worlds[204].status, "sapling")
+
 interfaces["1184:4"] = "Queen of Sunrise"
 interfaces["1184:10"] = "Nasty spirits have got at a willow tree sapling. It can be found north as the crow flies from Seers' Village."
 server(1)

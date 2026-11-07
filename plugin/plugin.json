@@ -7,7 +7,7 @@
         "prettyui": "prettyui"
     },
     "requiredPermissions": [],
-    "optionalPermissions": [],
+    "optionalPermissions": [ "chatAccess" ],
     "urls": {},
     "hasRibbonIcon": true
 }
