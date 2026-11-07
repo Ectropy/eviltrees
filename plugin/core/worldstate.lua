@@ -32,7 +32,8 @@
         health        percent, or nil if unknown
         healthSource  "examine" (exact) | "stage" (at most, from the tree's
                       look) | "strike" (at most, a strike we saw) |
-                      "timed" (a guess from the lightning schedule)
+                      "timed" (at most: by the lightning schedule, that
+                      strike has certainly happened by now)
         deadAt        when it was felled or died (best estimate)
         updatedAt     when this record last changed
     Times are Unix milliseconds. Missing fields are simply nil (absent),
@@ -54,8 +55,23 @@
         only inside the window.
       - A lightning strike we see (the NPC "Thor" at the tree) pins the beat
         to the second, and tells us M to within a minute.
+      - Strikes only happen to a tree that is still ABOVE the threshold:
+        strike 1 only above 50%, strike 2 only above 25%. They make sure a
+        tree nobody chops still dies on time. So a strike always changes
+        the tree's look (full -> _LVL2 = strike 1, _LVL2 -> _LVL3 = strike
+        2, -> _DYING = the kill), and that change says which strike it was.
+        And a tree already at or below a threshold skips that strike.
       - Timed rules only fill in what nobody has seen. While the tree is in
         view they pause completely: the game will tell us when it changes.
+      - NEVER SHOW A GUESS AS A FACT. "The tree is alive" alone only says M
+        was in the last 31 minutes. The best guess inside such a window is
+        just a number, so it never sets a health or a lightning time:
+          * lightning times are only shown once M is known to within a few
+            minutes (see TRUSTED_WINDOW_MS),
+          * a timed health is only set once the strike has certainly
+            happened, even if M was as late as it can be,
+          * the timed death uses the latest possible M, so a living tree
+            is never declared dead.
 
     How updates work (React developers: think of a reducer). Each change
     copies the record, edits the copy, and compares the copy with the
@@ -90,6 +106,14 @@ local DEAD_MS = 10 * MINUTE
 local JITTER_MS = 2 * SECOND
 -- A strike and the health-stage change it causes arrive within this time.
 local PAIR_MS = 2 * SECOND
+-- The widest window for M we still predict lightning from. A spawn timer
+-- gives S to within 1-2 minutes, and an unnurtured sapling grows up 5 min
+-- later, so "timer, then the crown says it's a tree" fits. "The spirit tree
+-- says it's alive" (31 min) or "we saw it at full health" (11 min) does not.
+local TRUSTED_WINDOW_MS = 7 * MINUTE
+-- A window for M this narrow (a strike we saw) gives times to the second,
+-- once the beat is known.
+local EXACT_WINDOW_MS = MINUTE + 2 * JITTER_MS
 
 -------------------------------------------------------------------------------
 -- Small helpers
@@ -267,15 +291,38 @@ local function nextBeat(due, beatMs)
     return from + (beatMs - from) % MINUTE
 end
 
--- When event number k happens (1 = first strike, 2 = second, 3 = death),
--- from matureAt. Without a known beat it can be anywhere in the minute
--- after the due time: "latest" picks the end of that minute (for promises
--- like "dies by"), otherwise the start (for "health is at most ...").
--- Returns the time, and true if it's approximate (beat unknown).
+-- How wide the window for M is (ms), or nil if we have no window.
+local function matureWidth(record)
+    if record.matureEarliest == nil or record.matureLatest == nil then
+        return nil
+    end
+    return record.matureLatest - record.matureEarliest
+end
+
+-- True if we know M well enough to show lightning times from it.
+local function matureTrusted(record)
+    local width = matureWidth(record)
+    return record.matureAt ~= nil and width ~= nil and width <= TRUSTED_WINDOW_MS
+end
+
+-- When event number k happens (1 = first strike, 2 = second, 3 = death).
+--   latest = false: our best guess, from matureAt. Without a known beat it
+--                   is the start of the minute it can happen in.
+--   latest = true:  the LATEST it can happen, from matureLatest and the end
+--                   of that minute. Used for "it has certainly happened by
+--                   now" (timed health, timed death) and "dies by".
+-- Returns the time, and true if it's approximate (could be off by up to a
+-- minute or more: beat unknown, or M only known roughly).
 local function eventTime(record, k, latest)
-    local due = record.matureAt + k * STRIKE_1_MS
+    local mature = record.matureAt
+    if latest and record.matureLatest ~= nil then
+        mature = record.matureLatest
+    end
+    local due = mature + k * STRIKE_1_MS
+    local width = matureWidth(record)
+    local roughM = width == nil or width > EXACT_WINDOW_MS
     if record.beatMs ~= nil then
-        return nextBeat(due, record.beatMs), false
+        return nextBeat(due, record.beatMs), roughM
     end
     if latest then
         return due + MINUTE - 1, true
@@ -405,7 +452,11 @@ end
 -- strike it was is replaced.
 local function learnStrike(record, k, at, clockSlack)
     narrow(record, "mature", strikeWindow(k, at, clockSlack))
-    choose(record, "mature")
+    -- Best guess: M was exactly 10k minutes before the strike. Then the next
+    -- strike lands exactly 10 min after this one, on the same beat. (Keeping
+    -- an older guess here could leave M at the window's early edge, and
+    -- every later prediction a minute early.)
+    choose(record, "mature", at - k * STRIKE_1_MS)
     if record.healthSource == "strike" or record.healthSource == "timed" then
         record.health = nil
         record.healthSource = nil
@@ -520,13 +571,13 @@ end
 -- A lightning strike happened at the tree just now (capture/lightning.lua
 -- saw the "Thor" NPC).
 --   - It gives the beat to the second.
---   - Which strike was it? If the tree's health stage dropped in the same
---     second, the drop tells us (full -> _LVL2 = strike 1, _LVL2 -> _LVL3 =
---     strike 2). Otherwise we pick strike 1 or 2, whichever fits what we
---     know about M. We never decide from the strike alone that it was the
---     killing strike: if we were wrong, the timers would kill a living
---     tree. A real kill always comes with the _DYING loc, which sets the
---     death time itself.
+--   - Which strike was it? Only the tree's new look can tell us (see the
+--     header: a strike always changes it). That loc change arrives in the
+--     same second, before or after the strike:
+--       before: applyTreeLoc saved it as stageDropAt; we pair it here.
+--       after:  applyTreeLoc sees strikeSeenAt and pairs it there.
+--     _DYING means the kill: the dying loc sets the death time itself.
+--     We never guess the number from timing alone.
 function worldstate.applyStrike(worlds, world, now, secondsKnown)
     local clockSlack = clockSlackFor(secondsKnown)
     return update(worlds, world, now, function(record)
@@ -543,31 +594,9 @@ function worldstate.applyStrike(worlds, world, now, secondsKnown)
             -- window for M on records saved by older versions.)
             becomeAlive(record, now, record.health)
         end
-
-        local k
         if isRecent(record.stageDropAt, now, PAIR_MS) then
-            k = (record.stageDropCap == STRIKE_1_HEALTH) and 1 or 2
             -- ("x and a or b" is Lua's x ? a : b.)
-        else
-            -- Which of strike 1 and 2 fits what we know about M? If both
-            -- do, take the one closest to our guess. If neither does, it's
-            -- probably the killing strike (or something we assumed was
-            -- wrong): leave M alone and let the loc that changes in the
-            -- same second (_LVL2, _LVL3 or _DYING) tell us.
-            local bestDistance = nil
-            for candidate = 1, 2 do
-                local earliest, latest = strikeWindow(candidate, now, clockSlack)
-                local overlaps = earliest <= record.matureLatest and latest >= record.matureEarliest
-                if overlaps then
-                    local distance = math.abs(clampTime(record.matureAt, earliest, latest) - record.matureAt)
-                    if bestDistance == nil or distance < bestDistance then
-                        k, bestDistance = candidate, distance
-                    end
-                end
-            end
-        end
-        if k ~= nil then
-            learnStrike(record, k, now, clockSlack)
+            learnStrike(record, (record.stageDropCap == STRIKE_1_HEALTH) and 1 or 2, now, clockSlack)
         end
     end)
 end
@@ -705,24 +734,31 @@ local function runTimers(record, now)
         record.status = "alive"
     end
 
-    -- 3. Lightning caps at M + 10 and M + 20, then death at M + 30.
+    -- 3. Lightning caps at M + 10 and M + 20, then death at M + 30. Each
+    --    only once it has CERTAINLY happened (eventTime(..., true) is the
+    --    latest it can be), so a rough M never produces a health number.
     if record.status == "alive" then
         seedMatureFromSpawn(record)     -- also fills in records saved by older versions
     end
     if record.status == "alive" and record.matureAt ~= nil then
-        if now >= eventTime(record, 1, false)
+        if now >= eventTime(record, 1, true)
             and (record.health == nil or record.health > STRIKE_1_HEALTH) then
             record.health = STRIKE_1_HEALTH
             record.healthSource = "timed"
         end
-        if now >= eventTime(record, 2, false)
+        if now >= eventTime(record, 2, true)
             and (record.health == nil or record.health > STRIKE_2_HEALTH) then
             record.health = STRIKE_2_HEALTH
             record.healthSource = "timed"
         end
         -- Death at the latest possible time, so we never kill a living tree.
         local deathAt = eventTime(record, 3, true)
-        if now >= deathAt then
+        if now >= deathAt and not matureTrusted(record) then
+            -- It's certainly dead, but it may have died up to half an hour
+            -- ago and its rewards may be long gone. "Dead, rewards for 10
+            -- more minutes" would be a guess shown as a fact, so forget it.
+            forgetTree(record)
+        elseif now >= deathAt then
             record.status = "dead"
             record.deadAt = deathAt
             record.health = nil
@@ -765,22 +801,51 @@ end
 -- Reading a record (for the panel / dashboard)
 -------------------------------------------------------------------------------
 
+-- Strike k (1 or 2) only hits a tree above its threshold (50% / 25%).
+-- Returns "done" if health is known to be at or below it (struck already,
+-- or chopped below it, so this strike won't come), "due" if health is known
+-- to be above it (it hasn't struck yet, even if its time has passed), or
+-- "unknown" (no health: go by the time).
+local function strikeState(record, k)
+    local cap = STRIKE_1_HEALTH
+    if k == 2 then
+        cap = STRIKE_2_HEALTH
+    end
+    if record.health == nil then
+        return "unknown"
+    elseif record.health <= cap then
+        return "done"
+    end
+    return "due"
+end
+
 -- What happens next to this world's tree, and when (Unix ms). now may be
 -- nil (clock not running yet); then an alive tree just reports its death.
 -- Returns three values (Lua functions can return several, like returning
 -- [label, time, approximate] in JS), e.g. "lightning", 1793932480000, false.
--- approximate is true when the beat is unknown (the time could be up to a
--- minute off). Returns nil if nothing is due.
+-- approximate is true when the time could be a minute or more off.
+-- Labels for an alive tree:
+--   "lightning"   M is known well enough (matureTrusted) to time it
+--   "dies by"     the same, after the last strike
+--   "dies within" M is NOT known: only the latest it can possibly die
+-- Returns nil if nothing is due.
 function worldstate.nextEvent(record, now)
     if record.status == "none" and record.spawnAt ~= nil then
         return "spawns", record.spawnAt, false
     elseif record.status == "sapling" and record.spawnAt ~= nil then
         return "matures by", record.spawnAt + SAPLING_MATURE_MS, false
     elseif record.status == "alive" and record.matureAt ~= nil then
+        if not matureTrusted(record) then
+            -- Only an upper bound, so not "approximate": it can't be later.
+            local at = eventTime(record, 3, true)
+            return "dies within", at, false
+        end
         if now ~= nil then
             for k = 1, 2 do
                 local at, approximate = eventTime(record, k, false)
-                if now < at then
+                local state = strikeState(record, k)
+                -- "due" while overdue: the countdown shows 0:00 until it lands.
+                if state == "due" or (state == "unknown" and now < at) then
                     return "lightning", at, approximate
                 end
             end

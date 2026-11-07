@@ -249,21 +249,23 @@ lu, au = ws.nextEvent(WU[1], t("10:30:00"))
 check("L7 dies by", lu, "dies by")
 checkTime("L7 latest possible", au, "10:35:59")
 
--- the user's chop example: cut to 45% before strike 1; strike 2 still at M+20
+-- Strikes only hit a tree above the threshold. Chopped to 45% before
+-- strike 1: strike 1 never comes, the next lightning is strike 2 at M+20.
 local WCH = { [1] = aliveTree(t("10:05:00"), 0) }
 ws.applyExamine(WCH, 1, { health = 45 }, t("10:10:00"))
-ws.applyStrike(WCH, 1, t("10:15:00"))
-check("L8 strike 1 leaves 45%", WCH[1].health, 45)
-check("L8 still examine", WCH[1].healthSource, "examine")
-checkTime("L8 M kept", WCH[1].matureAt, "10:05:00")
-local lc, ac = ws.nextEvent(WCH[1], t("10:16:00"))
-check("L8 next", lc, "lightning")
+local lc, ac = ws.nextEvent(WCH[1], t("10:11:00"))
+check("L8 next skips strike 1", lc, "lightning")
 checkTime("L8 strike 2 at M+20", ac, "10:25:00")
+-- chopped to 20%: no more strikes, only the death
+ws.applyExamine(WCH, 1, { health = 20 }, t("10:12:00"))
+lc, ac = ws.nextEvent(WCH[1], t("10:12:00"))
+check("L8b no strikes left", lc, "dies by")
+checkTime("L8b death at M+30", ac, "10:35:00")
 
 -- Thor first, then the drop to LVL2 in the same second corrects a wrong pick
 local WTD = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:16:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:30:00") } }
 ws.applyStrike(WTD, 1, t("10:35:00"))
-checkTime("L9 first pick: strike 2", WTD[1].matureEarliest, "10:14:00")
+checkTime("L9 no guess from the strike alone", WTD[1].matureEarliest, "10:00:00")
 ws.applyTreeLoc(WTD, 1, "seen", OAK2, 1, 1, OAK, t("10:35:01"))
 checkTime("L9 corrected to strike 1", WTD[1].matureEarliest, "10:24:01")
 check("L9 health from strike 1", WTD[1].health, 50)
@@ -285,7 +287,7 @@ check("L11 still alive", WS[205].status, "alive")
 ws.tick(WS, t("04:44:00"), nil)                       -- walked away
 check("L11 alive after walking away", WS[205].status, "alive")
 local ls, as = ws.nextEvent(WS[205], t("04:44:00"))
-check("L11 next", ls, "dies by")
+check("L11 next (M unknown)", ls, "dies within")
 check("L11 death is later", as > t("04:44:00"), true)
 
 -- the real W205 kill: Thor 04:43:15, dying loc 04:43:16
@@ -307,6 +309,7 @@ check("L13 health untouched", WKS[1].health, nil)
 -- clock only minute-accurate (just after start-up): no beat, M still narrowed
 local WNS = { [1] = aliveTree(t("10:05:00"), nil) }
 ws.applyStrike(WNS, 1, t("10:14:40"), false)       -- clock 20 s behind the real 10:15:00
+ws.applyTreeLoc(WNS, 1, "seen", OAK2, 1, 1, OAK, t("10:14:40"), false)
 check("L15 no beat while unsynced", WNS[1].beatMs, nil)
 check("L15 health still set", WNS[1].health, 50)
 checkTime("L15 M kept (inside the widened window)", WNS[1].matureAt, "10:05:00")
@@ -457,6 +460,73 @@ local WJ = {}
 ws.applyDialogue(WJ, 9, { hint = "x" }, t("01:00:00"))
 ws.applyDialogue(WJ, 9, { hint = "x" }, t("01:05:00"))
 checkTime("C10 updatedAt only moves on change", WJ[9].updatedAt, "01:00:00")
+
+---------------------------------------------------------------- G: no guesses shown as facts (beta bug, W204 2026-11-06)
+-- The spirit tree only said "...here to help dispatch the evil tree?" The
+-- old code put M in the middle of 31 minutes and showed "~50%" and a
+-- lightning time. Then the tree was found at 100%.
+local greet = parser.parseDialogue("Spirit tree", "If you are a friend of the gnome people, you are a friend of mine. Do you wish to travel, or are you here to help dispatch the evil tree?")
+local WG1 = {}
+ws.applyDialogue(WG1, 204, greet, t("02:32:05"))
+check("G1 alive", WG1[204].status, "alive")
+check("G1 no health", WG1[204].health, nil)
+local lg, ag, apg = ws.nextEvent(WG1[204], t("02:32:06"))
+check("G1 no lightning time, only dies within", lg, "dies within")
+checkTime("G1 latest possible death", ag, "03:03:04")
+check("G1 an upper bound, not approximate", apg, false)
+-- walked away for a while: timers must not invent a health either
+ws.tick(WG1, t("02:40:00"), nil)
+check("G2 still no health", WG1[204].health, nil)
+check("G2 still alive", WG1[204].status, "alive")
+-- 11 min after the greeting strike 1 has certainly happened (M <= 02:32:05)
+ws.tick(WG1, t("02:43:05"), nil)
+check("G2b certain strike 1 gives at most 50%", WG1[204].health, 50)
+-- ...and it is never declared dead before the latest possible death
+ws.tick(WG1, t("03:03:04"), nil)
+check("G2c not killed early", WG1[204].status, "alive")
+ws.tick(WG1, t("03:03:06"), nil)
+check("G2c forgotten after the latest death (rewards may be long gone)", WG1[204], nil)
+
+-- The real sequence after "Clear world": greeting, teleport, full tree,
+-- examine 100%, Thor at 02:33:37 (the new loc arrived without "previous").
+local WG3 = {}
+ws.applyDialogue(WG3, 204, greet, t("02:32:05"))
+ws.applyTreeLoc(WG3, 204, "seen", WILLOW, 2602, 3117, nil, t("02:32:17"))
+ws.applyExamine(WG3, 204, parser.parseExamine("He'll weep when he's done being evil! The tree currently has approximately 100% of its health remaining."), t("02:32:20"))
+check("G3 seen 100%", WG3[204].health, 100)
+local l3 = ws.nextEvent(WG3[204], t("02:32:21"))
+check("G3 M still rough (11 min): no lightning time", l3, "dies within")
+ws.applyStrike(WG3, 204, t("02:33:37"))
+-- (capture/trees.lua now reports the in-place swap with previous = WILLOW)
+ws.applyTreeLoc(WG3, 204, "seen", WILLOW2, 2602, 3117, WILLOW, t("02:33:37"))
+check("G4 50% after strike", WG3[204].health, 50)
+checkTime("G4 M = strike - 10 min", WG3[204].matureAt, "02:23:37")
+local l4, a4, ap4 = ws.nextEvent(WG3[204], t("02:34:00"))
+check("G4 next", l4, "lightning")
+checkTime("G4 next strike exactly 10 min later", a4, "02:43:37")
+check("G4 exact", ap4, false)
+
+-- Seen health > 50% means strike 1 is still to come, even if its time
+-- has passed: never skip ahead to strike 2.
+local WG5 = { [1] = { status = "alive", treeType = "oak", matureAt = t("10:00:00"), matureEarliest = t("10:00:00"), matureLatest = t("10:00:00"), beatMs = 0, health = 100, healthSource = "examine" } }
+local l5, a5 = ws.nextEvent(WG5[1], t("10:10:30"))
+check("G5 overdue strike 1 still next", l5, "lightning")
+checkTime("G5 strike 1 time", a5, "10:10:00")
+
+-- A spawn timer, then the crown: M = S + 5 if unnurtured, a ~6 min window.
+-- Trusted enough for a lightning time, shown as approximate.
+local WG6 = {}
+ws.applyDialogue(WG6, 1, { timerMs = 7 * 60000 }, t("10:00:00"))   -- S 10:07..10:08
+ws.applyDialogue(WG6, 1, parser.parseDialogue("Queen of Sunrise", "Nasty spirits have got at a willow tree. It can be found north as the crow flies from Seers' Village."), t("10:14:00"))
+local l6, a6, ap6 = ws.nextEvent(WG6[1], t("10:14:00"))
+check("G6 lightning from timer", l6, "lightning")
+checkTime("G6 guess S + 15", a6, "10:22:30")
+check("G6 approximate", ap6, true)
+-- the guessed strike time passing doesn't stamp a health; certainty does
+ws.tick(WG6, t("10:23:00"), nil)
+check("G6b no health at the guessed time", WG6[1].health, nil)
+ws.tick(WG6, t("10:24:00"), nil)
+check("G6b at most 50% once certain", WG6[1].health, 50)
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

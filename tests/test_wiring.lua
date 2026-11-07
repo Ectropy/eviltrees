@@ -51,6 +51,14 @@ local n = #events
 trees.onLocAdded(ev(12345, 1, 1))                       -- not an evil tree
 check("T7 ignored", #events, n)
 
+-- swapped in place (no LocRemoved), as on the W204 strike at 02:33:37
+trees.onLocAdded(ev(11440, 2602, 3117))                 -- willow, full
+trees.onLocAdded(ev(11441, 2602, 3117))                 -- willow _LVL2, same tile
+check("T7b in-place swap is a change", last().previous and last().previous.healthCap, 100)
+trees.onLocAdded(ev(11441, 2602, 3117))                 -- same loc again (rescan)
+check("T7c same loc again is not", last().previous, nil)
+trees.reset()
+
 trees.onLocAdded(ev(14847, 5, 5))                       -- oak dead
 trees.onLocAnimation({ coordGrid = { x = 5, z = 5, level = 0 }, animation = "config.Seq.EVILTREE_FADE_OUT(1715)" })
 check("T8 fading", last().kind, "fading")
@@ -110,6 +118,11 @@ logic(10)
 server(2)
 handlers.NPCEntityAdded(npc(416, 3))                -- the same strike seen again
 check("M7 repeat ignored", store.worlds[204].strikeSeenAt, firstStrike)
+-- a Thor that isn't next to an evil tree we can see is not our tree's strike
+logic(10)
+server(20)
+handlers.NPCEntityAdded({ npcEntity = { configID = 416, uid = 4, coordGrid = { x = 2750, z = 3700, level = 0 } } })
+check("M7b far Thor ignored", store.worlds[204].strikeSeenAt, firstStrike)
 
 PluginShutdown()
 check("M4 saved worlds", type(saved.worlds), "table")

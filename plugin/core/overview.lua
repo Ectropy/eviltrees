@@ -36,6 +36,7 @@ local EVENT_WORDS = {
     ["matures by"] = "Full tree in",
     ["lightning"] = "Lightning in",
     ["dies by"] = "Dies in",
+    ["dies within"] = "Dies within",    -- only the latest it can die
     ["gone by"] = "Rewards gone in",
 }
 
@@ -65,9 +66,9 @@ local function describeTree(record)
     return "No tree"
 end
 
--- Health as shown: "45%" (examined, exact), "<=50%" (from the tree's look
--- or a strike we saw: at most), "~50%" (guessed from the lightning
--- schedule). nil if unknown.
+-- Health as shown: "45%" (examined, exact), or "<=50%" (at most: from the
+-- tree's look, a strike we saw, or a strike that has certainly happened by
+-- now). nil if unknown.
 local function describeHealth(record)
     if record.health == nil then
         return nil
@@ -76,8 +77,6 @@ local function describeHealth(record)
     local percent = string.format("%d%%", math.floor(record.health))
     if record.healthSource == "examine" then
         return percent
-    elseif record.healthSource == "timed" then
-        return "~" .. percent
     end
     return "<=" .. percent
 end

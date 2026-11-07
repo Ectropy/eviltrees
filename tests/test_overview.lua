@@ -28,7 +28,8 @@ check("F6 float input", overview.formatDuration(65000.0), "1:05")
 local worlds = {
   -- Current world: alive willow, examined at 45%, seen at its tile.
   [204] = { status = "alive", treeType = "willow", health = 45, healthSource = "examine",
-            matureAt = NOW - 5 * MINUTE, beatMs = 32000, tileX = 2702, tileZ = 3640 },
+            matureAt = NOW - 5 * MINUTE, matureEarliest = NOW - 5 * MINUTE, matureLatest = NOW - 5 * MINUTE,
+            beatMs = 32000, tileX = 2702, tileZ = 3640 },
   -- Spawns in 30 min, two-place hint.
   [117] = { status = "none", spawnAt = NOW + 30 * MINUTE,
             hint = "north as the crow flies from Seers' Village" },
@@ -106,13 +107,21 @@ check("H2 stage cap", heading(alive), "W1 - Evil tree - <=50%")
 alive.healthSource = "strike"
 check("H3 strike", heading(alive), "W1 - Evil tree - <=50%")
 alive.health, alive.healthSource = 25.0, "timed"
-check("H4 timed guess (float)", heading(alive), "W1 - Evil tree - ~25%")
+check("H4 timed (float): at most", heading(alive), "W1 - Evil tree - <=25%")
 check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "W1 - Magic sapling")
 check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "W1 - Evil tree")
 
 -- Approximate times (beat unknown) get a "~".
-local row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = NOW - MINUTE } }, 1, NOW, 137).current
+local M = NOW - MINUTE
+local row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M, matureLatest = M } }, 1, NOW, 137).current
 check("H7 approximate", overview.countdownText(row, NOW), "Lightning in ~9:00")
+
+-- Only told "it's alive" (M somewhere in the last 31 min): no lightning
+-- time, no health, just the latest it can die. (Beta bug 2026-11-06.)
+local guessed = { status = "alive", matureAt = NOW - 15 * MINUTE, matureEarliest = NOW - 31 * MINUTE, matureLatest = NOW }
+row = overview.build({ [1] = guessed }, 1, NOW, 137).current
+check("H8 rough M: heading", row.heading, "W1 - Evil tree")
+check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30:59")
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

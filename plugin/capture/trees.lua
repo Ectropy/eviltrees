@@ -27,7 +27,8 @@
     at (nearly) the same tile - the tile can shift by one when the model gets
     bigger. So a removed tree is remembered for a couple of server ticks; if
     a new evil tree loc appears close by in that time, it's reported with
-    previous = the removed one.
+    previous = the removed one. A LocAdded straight onto the tile of a
+    tracked tree (no LocRemoved) is a change too.
 ]]
 
 local safe = require("core/safe")
@@ -86,6 +87,31 @@ function trees.isTreeInView()
     return next(tracked) ~= nil
 end
 
+-- True if an evil tree is within maxTiles of this tile: one in view now, or
+-- one removed a moment ago. (A strike swaps the tree's loc in the same
+-- second, so the strike can arrive between the old loc's LocRemoved and the
+-- new one's LocAdded, while nothing is in "tracked".)
+-- The keys of "tracked" are text like "2520,3102,0"; string.match pulls the
+-- two numbers back out ("-?%d+" = an optional minus, then digits).
+function trees.isNearTree(x, z, maxTiles)
+    if x == nil or z == nil then
+        return false
+    end
+    for key in pairs(tracked) do
+        local tx, tz = string.match(key, "^(-?%d+),(-?%d+),")
+        if tx ~= nil and math.abs(tonumber(tx) - x) <= maxTiles
+            and math.abs(tonumber(tz) - z) <= maxTiles then
+            return true
+        end
+    end
+    for _, entry in ipairs(justRemoved) do
+        if math.abs(entry.x - x) <= maxTiles and math.abs(entry.z - z) <= maxTiles then
+            return true
+        end
+    end
+    return false
+end
+
 -- Event.ServerLogic handler: lets old "just removed" entries expire.
 function trees.onServerTick()
     serverTick = serverTick + 1
@@ -105,8 +131,16 @@ function trees.onLocAdded(event)
     if info == nil then
         return      -- not an evil tree
     end
-    tracked[tileKey(event.coordGrid)] = info
-    report("seen", info, event.coordGrid, takeJustRemoved(event.coordGrid))
+    local key = tileKey(event.coordGrid)
+    local previous = takeJustRemoved(event.coordGrid)
+    -- The game can also swap a loc in place: a LocAdded on the tile of a
+    -- tree we're tracking, with no LocRemoved first (seen in the beta on a
+    -- lightning strike, full tree -> _LVL2). That's a change too.
+    if previous == nil and tracked[key] ~= nil and tracked[key] ~= info then
+        previous = tracked[key]
+    end
+    tracked[key] = info
+    report("seen", info, event.coordGrid, previous)
 end
 
 -- Event.LocRemoved handler.

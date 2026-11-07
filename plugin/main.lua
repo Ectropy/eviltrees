@@ -134,9 +134,8 @@ local function describeRecord(record)
         parts[#parts + 1] = record.health .. "% (" .. tostring(record.healthSource) .. ")"
     end
     local text = table.concat(parts, " ")
-    -- nextEvent returns two values; "local a, b = f()" receives both.
     -- nextEvent returns three values; "local a, b, c = f()" receives them.
-    -- A "~" in front means "about" (up to a minute off: beat unknown).
+    -- A "~" in front means "about" (a minute or more off).
     local label, at, approximate = worldstate.nextEvent(record, clock.now())
     if label ~= nil then
         text = text .. " | next: " .. label .. " " .. (approximate and "~" or "") .. clock.formatUtc(at)
@@ -372,8 +371,17 @@ trees.setOnEvent(function(kind, info, tileX, tileZ, previous)
         tileX, tileZ, previous, clock.now(), clock.isSynced()))
 end)
 
+-- How close the "Thor" NPC must be to an evil tree we can see for it to
+-- count as a strike on that tree (seen 1 tile away in the beta).
+local STRIKE_MAX_TILES = 3
+
 -- A lightning strike at the tree (the "Thor" NPC appeared).
 lightning.setOnStrike(function(tileX, tileZ)
+    -- Only a strike next to an evil tree in view is about this world's tree.
+    if not trees.isNearTree(tileX, tileZ, STRIKE_MAX_TILES) then
+        addCapture("lightning ignored (no evil tree next to it) at " .. tostring(tileX) .. "," .. tostring(tileZ))
+        return
+    end
     addCapture("lightning strike at " .. tostring(tileX) .. "," .. tostring(tileZ))
     noteChange(worldstate.applyStrike(store.worlds, currentWorld.number, clock.now(), clock.isSynced()))
 end)
