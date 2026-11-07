@@ -94,9 +94,12 @@ local recentCaptures = {}
 -- Adds a line like "03:41:12 W204 spirit tree: spawn in 1h42m" to the panel
 -- list. fullText (optional) is the complete original game text; it goes into
 -- the saved capture log only, since it can be too long for the panel.
+-- A "~" before the time means the clock didn't know the seconds yet (right
+-- after start-up), so the time may be up to a minute early.
 local function addCapture(text, fullText)
     local world = currentWorld.number and ("W" .. currentWorld.number) or "W?"
-    local line = clock.formatUtc(clock.now()) .. " " .. world .. " " .. text
+    local approx = clock.isSynced() and "" or "~"
+    local line = approx .. clock.formatUtc(clock.now()) .. " " .. world .. " " .. text
     table.insert(recentCaptures, 1, line)
     if #recentCaptures > MAX_RECENT then
         table.remove(recentCaptures)    -- with no position given, removes the last (oldest) one
@@ -329,7 +332,7 @@ dialogue.setOnPage(function(speaker, text)
     if facts.hint then parts[#parts + 1] = "hint '" .. shorten(facts.hint, 40) .. "'" end
     if facts.locationClue then parts[#parts + 1] = "at '" .. shorten(facts.locationClue, 40) .. "'" end
     addCapture(facts.source .. ": " .. table.concat(parts, ", "), text)
-    noteChange(worldstate.applyDialogue(store.worlds, currentWorld.number, facts, clock.now()))
+    noteChange(worldstate.applyDialogue(store.worlds, currentWorld.number, facts, clock.now(), clock.isSynced()))
 end)
 
 -- Examine text. Unrecognised text is shown too (shortened), so we can learn

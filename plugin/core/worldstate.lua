@@ -491,7 +491,8 @@ end
 -- facts come from parser.parseDialogue. A conversation arrives one page at a
 -- time (timer on one page, hint on the next), so each page only touches the
 -- fields it knows about and never wipes what an earlier page set.
-function worldstate.applyDialogue(worlds, world, facts, now)
+-- secondsKnown is optional, see clockSlackFor.
+function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
     return update(worlds, world, now, function(record)
         -- "Another tree in X minutes": any tree we had is gone, including a
         -- dead trunk (the timer only starts once the rewards are over).
@@ -528,9 +529,15 @@ function worldstate.applyDialogue(worlds, world, facts, now)
 
         if facts.timerMs ~= nil then
             -- Each reading narrows the window; the middle is the best guess.
-            narrow(record, "spawn", timerWindow(facts.timerMs, now))
-            -- (timerWindow returns two values, which become narrow's 3rd
-            -- and 4th arguments, like spreading [a, b] in JS.)
+            -- (timerWindow returns two values; "local a, b = f()" takes both,
+            -- like const [a, b] = f() in JS.)
+            local earliest, latest = timerWindow(facts.timerMs, now)
+            -- Right after a restart our clock can be up to a minute behind
+            -- (see clockSlackFor), so the real reading may have been up to
+            -- a minute later: the spawn too. A wider window shows as "~".
+            -- (Seen 2026-11-07: a W204 yew died 36 s after the window
+            -- allowed; its timer was read just after a restart.)
+            narrow(record, "spawn", earliest, latest + clockSlackFor(secondsKnown))
             record.spawnAt = (record.spawnEarliest + record.spawnLatest) // 2
         end
 
@@ -851,7 +858,11 @@ end
 -- Returns nil if nothing is due.
 function worldstate.nextEvent(record, now)
     if record.status == "none" and record.spawnAt ~= nil then
-        return "spawns", record.spawnAt, false
+        -- One "N minutes" reading gives a 1 min window: shown as exact,
+        -- like EctoTrees. Wider ("1 minute", or read right after a
+        -- restart) is shown with "~".
+        local width = (record.spawnLatest or record.spawnAt) - (record.spawnEarliest or record.spawnAt)
+        return "spawns", record.spawnAt, width > EXACT_WINDOW_MS
     elseif record.status == "sapling" and record.spawnAt ~= nil then
         return "matures by", record.spawnAt + SAPLING_MATURE_MS, false
     elseif record.status == "alive" and record.matureAt ~= nil then

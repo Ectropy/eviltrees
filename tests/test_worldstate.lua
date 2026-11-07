@@ -555,5 +555,20 @@ local WG9 = {}
 ws.applyTreeLoc(WG9, 1, "seen", OAK, 1, 1, nil, t("10:00:00"))
 check("G9 full tree alone: only dies within", (ws.nextEvent(WG9[1], t("10:00:00"))), "dies within")
 
+---------------------------------------------------------------- K: timer read before the clock knows the seconds
+local WK = {}
+ws.applyDialogue(WK, 1, { timerMs = 16 * 60000 }, t("10:00:00"))
+local _, _, apK = ws.nextEvent(WK[1], t("10:00:00"))
+check("K1 one synced reading: exact (no ~)", apK, false)
+local WK2 = {}
+ws.applyDialogue(WK2, 1, { timerMs = 16 * 60000 }, t("10:00:00"), false)
+checkTime("K2 late end moved a minute", WK2[1].spawnLatest, "10:18:00")
+local _, _, apK2 = ws.nextEvent(WK2[1], t("10:00:00"))
+check("K2 shown with ~", apK2, true)
+-- a later synced reading narrows it back to exact
+ws.applyDialogue(WK2, 1, { timerMs = 15 * 60000 }, t("10:01:00"), true)
+local _, _, apK3 = ws.nextEvent(WK2[1], t("10:01:00"))
+check("K3 synced reading makes it exact again", apK3, false)
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
