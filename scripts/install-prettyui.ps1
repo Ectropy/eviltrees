@@ -7,7 +7,7 @@
     a Plugin Hub library. A dev plugin's dependencies aren't downloaded by the client,
     so this script fetches one tagged PrettyUI release with git and copies the files a
     release contains (plugin.json, main.lua, src, resources, LICENSE) into
-    dev_plugins\prettyui. plugins\evil-trees\plugin.json points at that folder name.
+    dev_plugins\prettyui. plugin\plugin.json points at that folder name.
 
     Then enable it once in the game console:  pon prettyui
     and reload Evil Trees:                     prl evil-trees

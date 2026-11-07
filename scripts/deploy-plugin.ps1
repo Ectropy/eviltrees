@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Copies a plugin from this repo's plugins\ folder into the RS3 beta client's dev_plugins folder.
+    Copies the plugin in this repo's plugin\ folder into the RS3 beta client's dev_plugins folder.
 
 .DESCRIPTION
     Replaces the plugin's folder in dev_plugins with a fresh copy, so files deleted
@@ -10,11 +10,15 @@
 
 .EXAMPLE
     .\scripts\deploy-plugin.ps1
-    Deploys the default plugin (plugins\evil-trees).
+    Deploys plugin\ as dev_plugins\evil-trees.
+
+.EXAMPLE
+    .\scripts\deploy-plugin.ps1 -Probe
+    Deploys the local research probe (research\probe, not in git) as dev_plugins\evil-trees-probe.
 #>
 param(
-    # Folder name under plugins\ (this is also the name used by pon/prl in the console).
-    [string]$Name = "evil-trees",
+    # Deploy the research probe instead of the real plugin.
+    [switch]$Probe,
 
     # The beta client's dev_plugins folder.
     [string]$DevPluginsPath = "C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins"
@@ -22,13 +26,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$source = Join-Path $PSScriptRoot "..\plugins\$Name" | Resolve-Path -ErrorAction SilentlyContinue
+# $Name is the folder name in dev_plugins, which is also the name pon/prl use.
+if ($Probe) {
+    $relative = "research\probe"
+    $Name = "evil-trees-probe"
+} else {
+    $relative = "plugin"
+    $Name = "evil-trees"
+}
+
+$source = Join-Path $PSScriptRoot "..\$relative" | Resolve-Path -ErrorAction SilentlyContinue
 if (-not $source) {
-    throw "Plugin folder not found: plugins\$Name"
+    throw "Plugin folder not found: $relative"
 }
 foreach ($required in "main.lua", "plugin.json") {
     if (-not (Test-Path (Join-Path $source $required))) {
-        throw "plugins\$Name is missing $required"
+        throw "$relative is missing $required"
     }
 }
 if (-not (Test-Path $DevPluginsPath)) {
@@ -42,5 +55,5 @@ if (Test-Path $destination) {
 Copy-Item -Recurse $source $destination
 
 $files = (Get-ChildItem -Recurse -File $destination).Count
-Write-Host "Deployed $Name ($files files) to $destination"
+Write-Host "Deployed $relative ($files files) to $destination"
 Write-Host "In the game console run:  prl $Name   (or pon $Name if it's off)"
