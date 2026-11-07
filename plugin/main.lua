@@ -202,13 +202,14 @@ local function debugLines(model)
         end
     end
 
-    local clockState = "minute only"
-    if clock.isSynced() then
-        -- // 1000 turns milliseconds into whole seconds.
-        clockState = "synced, jumped " .. (clock.syncCorrectionMs // 1000) .. "s"
-    end
+    local clockState
     if clock.now() == nil then
         clockState = "waiting for game clock"
+    elseif clock.isSynced() then
+        -- // 1000 turns milliseconds into whole seconds.
+        clockState = "synced, jumped " .. (clock.syncCorrectionMs // 1000) .. "s"
+    else
+        clockState = "minute only"
     end
 
     local previousText = "none"
@@ -348,18 +349,18 @@ end)
 -- what new texts look like - e.g. examining a sapling.
 examine.setOnText(function(text)
     local facts = parser.parseExamine(text)
-    if facts ~= nil and facts.health ~= nil then
-        addCapture("examine: health " .. facts.health .. "%", text)
-    elseif facts ~= nil and facts.deadWithRewards then
-        addCapture("examine: dead tree with rewards", text)
-    elseif facts ~= nil and facts.deadNoRewards then
-        addCapture("examine: dead tree, no rewards (left)", text)
-    else
+    if facts == nil then
         addCapture("examine (unrecognised): '" .. shorten(text, 40) .. "'", text)
+        return
     end
-    if facts ~= nil then
-        noteChange(worldstate.applyExamine(store.worlds, currentWorld.number, facts, clock.now()))
+    if facts.health ~= nil then
+        addCapture("examine: health " .. facts.health .. "%", text)
+    elseif facts.deadWithRewards then
+        addCapture("examine: dead tree with rewards", text)
+    elseif facts.deadNoRewards then
+        addCapture("examine: dead tree, no rewards (left)", text)
     end
+    noteChange(worldstate.applyExamine(store.worlds, currentWorld.number, facts, clock.now()))
 end)
 
 -- A game message in the chatbox (only with the optional chatAccess
@@ -474,9 +475,7 @@ Event.NPCEntityAdded.Subscribe("evilTrees", safe.handler("NPCEntityAdded", light
 Event.ChatMessage.Subscribe("evilTrees", safe.handler("ChatMessage", chat.onChatMessage))
 
 -- Logging in, hopping worlds, logging out.
-Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", function(event)
-    currentWorld.onGameStateChanged(event)
-end))
+Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", currentWorld.onGameStateChanged))
 
 -- The dashboard (or the plain debug panel).
 if USE_RIBBON then
