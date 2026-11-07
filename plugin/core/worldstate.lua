@@ -915,17 +915,10 @@ end
 -------------------------------------------------------------------------------
 
 -- Strike k (1 or 2) only hits a tree above its threshold (50% / 25%).
--- Returns "done" if health is known to be at or below it (struck already,
--- or chopped below it, so this strike won't come), "due" if health is known
--- to be above it (it hasn't struck yet, even if its time has passed), or
--- "unknown" (no health: go by the time).
-local function strikeState(record, k)
-    if record.health == nil then
-        return "unknown"
-    elseif record.health <= strikeCap(k) then
-        return "done"
-    end
-    return "due"
+-- True if health is known to be at or below it: struck already, or chopped
+-- below it, so this strike won't come.
+local function strikeDone(record, k)
+    return record.health ~= nil and record.health <= strikeCap(k)
 end
 
 -- What happens next to this world's tree, and when (Unix ms). now may be
@@ -958,9 +951,9 @@ function worldstate.nextEvent(record, now)
                 local at, approximate = eventTime(record, k, false)
                 -- Once a strike's time has passed we move on to the next
                 -- event, even if we didn't see it land (a countdown stuck
-                -- at 0:00 looks like a bug). A strike already "done"
+                -- at 0:00 looks like a bug). A strike already done
                 -- (health at or below its threshold) is skipped too.
-                if now < at and strikeState(record, k) ~= "done" then
+                if now < at and not strikeDone(record, k) then
                     return "lightning", at, approximate
                 end
             end
