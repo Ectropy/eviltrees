@@ -226,16 +226,16 @@ checkTime("L4 chop keeps M", WC2[1].matureAt, "03:05:00")
 ws.applyTreeLoc(WC2, 1, "seen", OAK3, 1, 1, OAK2, t("03:10:00"))
 checkTime("L4 chop again keeps M", WC2[1].matureAt, "03:05:00")
 
--- unfelled death at M+30 on the beat; without a beat, at the latest
+-- unfelled death at exactly M+30, with or without a known beat
 local WK = { [1] = aliveTree(t("03:05:00"), 0) }
 ws.tick(WK, t("03:35:00"), nil)
 check("L5 dies at M+30", WK[1].status, "dead")
 checkTime("L5 deadAt", WK[1].deadAt, "03:35:00")
 local WK2 = { [1] = aliveTree(t("03:05:00"), nil) }
-ws.tick(WK2, t("03:35:30"), nil)
+ws.tick(WK2, t("03:34:59"), nil)
 check("L5b no beat: not killed early", WK2[1].status, "alive")
-ws.tick(WK2, t("03:36:00"), nil)
-check("L5b no beat: dead after the minute", WK2[1].status, "dead")
+ws.tick(WK2, t("03:35:00"), nil)
+check("L5b no beat: dead at M+30", WK2[1].status, "dead")
 
 -- jitter: M seen 0.4 s after the beat must not push strike 1 a minute late
 local WJ1 = { [1] = aliveTree(t("10:05:00") + 400, 0) }
@@ -244,14 +244,14 @@ check("L6 next is lightning", lj, "lightning")
 checkTime("L6 on the beat, not a minute late", aj, "10:15:00")
 check("L6 exact", approxJ, false)
 
--- unknown beat: shown as approximate; "dies by" is the latest possible
+-- unknown beat but M known to the second: exactly M+10 / M+30
 local WU = { [1] = aliveTree(t("10:05:00"), nil) }
 local lu, au, approxU = ws.nextEvent(WU[1], t("10:06:00"))
-checkTime("L7 lightning ~M+10", au, "10:15:00")
-check("L7 approximate", approxU, true)
+checkTime("L7 lightning M+10", au, "10:15:00")
+check("L7 exact", approxU, false)
 lu, au = ws.nextEvent(WU[1], t("10:30:00"))
 check("L7 dies by", lu, "dies by")
-checkTime("L7 latest possible", au, "10:35:59")
+checkTime("L7 dies at M+30", au, "10:35:00")
 
 -- Strikes only hit a tree above the threshold. Chopped to 45% before
 -- strike 1: strike 1 never comes, the next lightning is strike 2 at M+20.
@@ -477,19 +477,21 @@ check("G1 no health", WG1[204].health, nil)
 check("G1 M source", WG1[204].matureSource, "alive")
 local lg, ag, apg = ws.nextEvent(WG1[204], t("02:32:06"))
 check("G1 no lightning time, only dies within", lg, "dies within")
-checkTime("G1 latest possible death", ag, "03:03:04")
+checkTime("G1 latest possible death (exactly 30 min)", ag, "03:02:05")
 check("G1 an upper bound, not approximate", apg, false)
 -- walked away for a while: timers must not invent a health either
 ws.tick(WG1, t("02:40:00"), nil)
 check("G2 still no health", WG1[204].health, nil)
 check("G2 still alive", WG1[204].status, "alive")
--- 11 min after the greeting strike 1 has certainly happened (M <= 02:32:05)
-ws.tick(WG1, t("02:43:05"), nil)
+-- 10 min after the greeting strike 1 has certainly happened (M <= 02:32:05)
+ws.tick(WG1, t("02:42:04"), nil)
+check("G2b no strike before M+10", WG1[204].health, nil)
+ws.tick(WG1, t("02:42:05"), nil)
 check("G2b certain strike 1 gives at most 50%", WG1[204].health, 50)
 -- ...and it is never declared dead before the latest possible death
-ws.tick(WG1, t("03:03:04"), nil)
+ws.tick(WG1, t("03:02:04"), nil)
 check("G2c not killed early", WG1[204].status, "alive")
-ws.tick(WG1, t("03:03:06"), nil)
+ws.tick(WG1, t("03:02:05"), nil)
 check("G2c forgotten after the latest death (rewards may be long gone)", WG1[204], nil)
 
 -- The real sequence after "Clear world": greeting, teleport, full tree,
@@ -520,8 +522,8 @@ check("G5 overdue strike 1 still next", l5, "lightning")
 checkTime("G5 strike 1 time", a5, "10:10:00")
 
 -- A spawn timer, then the crown: assumed unnurtured, M = S + 5, so the
--- window for M is the timer's 1 min window moved 5 min on. Shown as
--- approximate only because the beat isn't known.
+-- window for M is the timer's 1 min window moved 5 min on. A 1 min window
+-- is shown as exact, like the spawn time itself.
 local CROWN_TREE = parser.parseDialogue("Queen of Sunrise", "Nasty spirits have got at a willow tree. It can be found north as the crow flies from Seers' Village.")
 local WG6 = {}
 ws.applyDialogue(WG6, 1, { timerMs = 7 * 60000 }, t("10:00:00"))   -- S 10:07..10:08
@@ -532,11 +534,12 @@ check("G6 M inferred from S", WG6[1].matureSource, "fromSpawn")
 local l6, a6, ap6 = ws.nextEvent(WG6[1], t("10:14:00"))
 check("G6 lightning from timer", l6, "lightning")
 checkTime("G6 guess S + 15", a6, "10:22:30")
-check("G6 approximate", ap6, true)
+check("G6 exact (1 min window)", ap6, false)
 -- the guessed strike time passing doesn't stamp a health; certainty does
-ws.tick(WG6, t("10:23:00"), nil)
+-- (latest M 10:13:00 + 10 min)
+ws.tick(WG6, t("10:22:59"), nil)
 check("G6b no health at the guessed time", WG6[1].health, nil)
-ws.tick(WG6, t("10:24:00"), nil)
+ws.tick(WG6, t("10:23:00"), nil)
 check("G6b at most 50% once certain", WG6[1].health, 50)
 
 -- Same timer, but the crown says "tree" before S + 5: it was nurtured. The

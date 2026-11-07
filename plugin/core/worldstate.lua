@@ -50,9 +50,9 @@
     The tree's schedule (as observed in the beta client):
       - S: sapling stage 1. Without nurturing, a new stage every 60 s and
         a full tree at S + 5 min. Nurturing makes it all happen sooner.
-      - M: full tree. Lightning at M + 10 and M + 20 min, death at M + 30,
-        each moved to the first "beat" at or after that time (so up to 59 s
-        later). Untouched, M = S + 5 and everything lands on the beat.
+      - M: full tree. Lightning at exactly M + 10 and M + 20 min, death at
+        exactly M + 30 (to the second, even when nurturing moved M). So the
+        strikes and the death share M's second past the minute: the "beat".
       - Dead trunk (rewards) for 9:06 after death, then it fades out.
 
     The rule everything follows: SOMETHING SEEN BEATS A TIMED GUESS.
@@ -361,13 +361,16 @@ local function matureTrusted(record)
 end
 
 -- When event number k happens (1 = first strike, 2 = second, 3 = death).
---   latest = false: our best guess, from matureAt. Without a known beat it
---                   is the start of the minute it can happen in.
---   latest = true:  the LATEST it can happen, from matureLatest and the end
---                   of that minute. Used for "it has certainly happened by
---                   now" (timed health, timed death) and "dies by".
--- Returns the time, and true if it's approximate (could be off by up to a
--- minute or more: beat unknown, or M only known roughly).
+--   latest = false: our best guess, from matureAt.
+--   latest = true:  the LATEST it can happen, from matureLatest. Used for
+--                   "it has certainly happened by now" (timed health, timed
+--                   death) and "dies by".
+-- Events come exactly M + 10/20/30 min after the tree matured (seen to the
+-- second in the beta, see research/evil-tree-locs.md). If we know the beat
+-- (from a strike we saw), the time is put on it, which fixes up an M that
+-- was seen a second or so late.
+-- Returns the time, and true if it's approximate (could be off by a minute
+-- or more, because M is only known roughly).
 local function eventTime(record, k, latest)
     local mature = record.matureAt
     if latest and record.matureLatest ~= nil then
@@ -379,10 +382,7 @@ local function eventTime(record, k, latest)
     if record.beatMs ~= nil then
         return nextBeat(due, record.beatMs), roughM
     end
-    if latest then
-        return due + MINUTE - 1, true
-    end
-    return due, true
+    return due, roughM
 end
 
 -- How long ago the tree can have matured, given its health right now.

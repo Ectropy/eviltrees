@@ -111,17 +111,20 @@ check("H4 timed (float): at most", heading(alive), "W1 - Evil tree - <=25%")
 check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "W1 - Magic sapling")
 check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "W1 - Evil tree")
 
--- Approximate times (beat unknown) get a "~".
+-- M known to the second: exact, even without a beat (events are exactly
+-- M + 10/20/30). M only known within a few minutes: approximate, "~".
 local M = NOW - MINUTE
 local row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M, matureLatest = M } }, 1, NOW, 137).current
-check("H7 approximate", overview.countdownText(row, NOW), "Lightning in ~9:00")
+check("H7 exact M, no beat", overview.countdownText(row, NOW), "Lightning in 9:00")
+row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M - 2 * MINUTE, matureLatest = M } }, 1, NOW, 137).current
+check("H7b rough M is approximate", overview.countdownText(row, NOW), "Lightning in ~9:00")
 
 -- Only told "it's alive" (M somewhere in the last 31 min): no lightning
 -- time, no health, just the latest it can die. (Beta bug 2026-11-06.)
 local guessed = { status = "alive", matureAt = NOW - 15 * MINUTE, matureEarliest = NOW - 31 * MINUTE, matureLatest = NOW }
 row = overview.build({ [1] = guessed }, 1, NOW, 137).current
 check("H8 rough M: heading", row.heading, "W1 - Evil tree")
-check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30:59")
+check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30:00")
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
