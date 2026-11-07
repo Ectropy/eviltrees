@@ -40,7 +40,7 @@ local REPLACE_WINDOW_TICKS = 2  -- server ticks (~1.2 s) a removed tree is remem
 local REPLACE_MAX_TILES = 2     -- how far the replacement may be from the old tile
 
 local onEvent = nil     -- function(kind, info, tileX, tileZ, previous), set by main.lua
-local tracked = {}      -- [tile key] = info of the evil tree loc on that tile
+local tracked = {}      -- [tile key] = { info, x, z } for each evil tree loc in view
 local justRemoved = {}  -- list of { info, x, z, tick } for recently removed trees
 local serverTick = 0
 
@@ -50,6 +50,17 @@ local function tileKey(coord)
     return coord.x .. "," .. coord.z .. "," .. coord.level
 end
 
+-- Starts tracking the evil tree loc on this tile (replacing any before it).
+local function track(coord, info)
+    tracked[tileKey(coord)] = { info = info, x = coord.x, z = coord.z }
+end
+
+-- True if a remembered tree (an entry of tracked or justRemoved) is at most
+-- maxTiles away from tile x, z in both directions. math.abs is Math.abs.
+local function isNear(entry, x, z, maxTiles)
+    return math.abs(entry.x - x) <= maxTiles and math.abs(entry.z - z) <= maxTiles
+end
+
 local function report(kind, info, coord, previous)
     if onEvent ~= nil then
         onEvent(kind, info, coord.x, coord.z, previous)
@@ -57,11 +68,10 @@ local function report(kind, info, coord, previous)
 end
 
 -- Finds (and forgets) a tree removed a moment ago close to this tile.
--- Returns its info, or nil. math.abs is Math.abs.
+-- Returns its info, or nil.
 local function takeJustRemoved(coord)
     for index, entry in ipairs(justRemoved) do
-        if math.abs(entry.x - coord.x) <= REPLACE_MAX_TILES
-            and math.abs(entry.z - coord.z) <= REPLACE_MAX_TILES then
+        if isNear(entry, coord.x, coord.z, REPLACE_MAX_TILES) then
             table.remove(justRemoved, index)
             return entry.info
         end
@@ -91,21 +101,18 @@ end
 -- one removed a moment ago. (A strike swaps the tree's loc in the same
 -- second, so the strike can arrive between the old loc's LocRemoved and the
 -- new one's LocAdded, while nothing is in "tracked".)
--- The keys of "tracked" are text like "2520,3102,0"; string.match pulls the
--- two numbers back out ("-?%d+" = an optional minus, then digits).
+-- pairs() walks a table with any keys (here tile keys), ipairs() a list.
 function trees.isNearTree(x, z, maxTiles)
     if x == nil or z == nil then
         return false
     end
-    for key in pairs(tracked) do
-        local tx, tz = string.match(key, "^(-?%d+),(-?%d+),")
-        if tx ~= nil and math.abs(tonumber(tx) - x) <= maxTiles
-            and math.abs(tonumber(tz) - z) <= maxTiles then
+    for _, entry in pairs(tracked) do
+        if isNear(entry, x, z, maxTiles) then
             return true
         end
     end
     for _, entry in ipairs(justRemoved) do
-        if math.abs(entry.x - x) <= maxTiles and math.abs(entry.z - z) <= maxTiles then
+        if isNear(entry, x, z, maxTiles) then
             return true
         end
     end
@@ -131,15 +138,15 @@ function trees.onLocAdded(event)
     if info == nil then
         return      -- not an evil tree
     end
-    local key = tileKey(event.coordGrid)
     local previous = takeJustRemoved(event.coordGrid)
     -- The game can also swap a loc in place: a LocAdded on the tile of a
     -- tree we're tracking, with no LocRemoved first (seen in the beta on a
     -- lightning strike, full tree -> _LVL2). That's a change too.
-    if previous == nil and tracked[key] ~= nil and tracked[key] ~= info then
-        previous = tracked[key]
+    local old = tracked[tileKey(event.coordGrid)]
+    if previous == nil and old ~= nil and old.info ~= info then
+        previous = old.info
     end
-    tracked[key] = info
+    track(event.coordGrid, info)
     report("seen", info, event.coordGrid, previous)
 end
 
@@ -147,24 +154,24 @@ end
 function trees.onLocRemoved(event)
     local coord = event.coordGrid
     local key = tileKey(coord)
-    local info = tracked[key]
-    if info == nil then
+    local entry = tracked[key]
+    if entry == nil then
         return
     end
     tracked[key] = nil
-    justRemoved[#justRemoved + 1] = { info = info, x = coord.x, z = coord.z, tick = serverTick }
-    report("removed", info, coord)
+    justRemoved[#justRemoved + 1] = { info = entry.info, x = coord.x, z = coord.z, tick = serverTick }
+    report("removed", entry.info, coord)
 end
 
 -- Event.LocAnimation handler. We only care about the dead trunk fading out.
 function trees.onLocAnimation(event)
-    local info = tracked[tileKey(event.coordGrid)]
-    if info == nil or event.animation == nil then
+    local entry = tracked[tileKey(event.coordGrid)]
+    if entry == nil or event.animation == nil then
         return
     end
     -- The animation prints like "config.Seq.EVILTREE_FADE_OUT(1715)".
     if string.find(tostring(event.animation), "EVILTREE_FADE_OUT", 1, true) then
-        report("fading", info, event.coordGrid)
+        report("fading", entry.info, event.coordGrid)
     end
 end
 
@@ -176,7 +183,7 @@ function trees.scanNearby()
         local found = safe.try(function() return LocList.ByConfigID(locId) end) or {}
         for _, loc in ipairs(found) do
             if loc.isValid then
-                tracked[tileKey(loc.coordGrid)] = info
+                track(loc.coordGrid, info)
                 report("seen", info, loc.coordGrid)
             end
         end

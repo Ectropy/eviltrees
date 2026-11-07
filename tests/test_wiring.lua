@@ -64,6 +64,19 @@ trees.onLocAnimation({ coordGrid = { x = 5, z = 5, level = 0 }, animation = "con
 check("T8 fading", last().kind, "fading")
 trees.reset()
 
+-- isNearTree: a tree in view, or one removed a moment ago (a strike can land
+-- between the old loc's LocRemoved and the new one's LocAdded).
+trees.onLocAdded(ev(11440, 2602, 3117))                 -- willow, full
+check("T9 near tree in view", trees.isNearTree(2603, 3116, 3), true)
+check("T9 negative offset", trees.isNearTree(2599, 3120, 3), true)
+check("T9 too far", trees.isNearTree(2606, 3117, 3), false)
+check("T9 nil tile", trees.isNearTree(nil, 3117, 3), false)
+trees.onLocRemoved(ev(0, 2602, 3117))
+check("T9 near just-removed", trees.isNearTree(2602, 3118, 3), true)
+trees.onServerTick(); trees.onServerTick(); trees.onServerTick()
+check("T9 just-removed expired", trees.isNearTree(2602, 3118, 3), false)
+trees.reset()
+
 ---------------------------------------------------------------- main.lua smoke
 local game = require("fakegame")   -- stubs every game global (tests/fakegame.lua)
 local handlers, errors, saved, interfaces = game.handlers, game.errors, game.saved, game.interfaces
