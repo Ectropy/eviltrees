@@ -513,11 +513,15 @@ local l5, a5 = ws.nextEvent(WG5[1], t("10:10:30"))
 check("G5 overdue strike 1 still next", l5, "lightning")
 checkTime("G5 strike 1 time", a5, "10:10:00")
 
--- A spawn timer, then the crown: M = S + 5 if unnurtured, a ~6 min window.
--- Trusted enough for a lightning time, shown as approximate.
+-- A spawn timer, then the crown: assumed unnurtured, M = S + 5, so the
+-- window for M is the timer's 1 min window moved 5 min on. Shown as
+-- approximate only because the beat isn't known.
+local CROWN_TREE = parser.parseDialogue("Queen of Sunrise", "Nasty spirits have got at a willow tree. It can be found north as the crow flies from Seers' Village.")
 local WG6 = {}
 ws.applyDialogue(WG6, 1, { timerMs = 7 * 60000 }, t("10:00:00"))   -- S 10:07..10:08
-ws.applyDialogue(WG6, 1, parser.parseDialogue("Queen of Sunrise", "Nasty spirits have got at a willow tree. It can be found north as the crow flies from Seers' Village."), t("10:14:00"))
+ws.applyDialogue(WG6, 1, CROWN_TREE, t("10:14:00"))
+checkTime("G6 M window from (unnurtured)", WG6[1].matureEarliest, "10:12:00")
+checkTime("G6 M window to", WG6[1].matureLatest, "10:13:00")
 local l6, a6, ap6 = ws.nextEvent(WG6[1], t("10:14:00"))
 check("G6 lightning from timer", l6, "lightning")
 checkTime("G6 guess S + 15", a6, "10:22:30")
@@ -527,6 +531,29 @@ ws.tick(WG6, t("10:23:00"), nil)
 check("G6b no health at the guessed time", WG6[1].health, nil)
 ws.tick(WG6, t("10:24:00"), nil)
 check("G6b at most 50% once certain", WG6[1].health, 50)
+
+-- Same timer, but the crown says "tree" before S + 5: it was nurtured. The
+-- unnurtured guess is dropped; M lies between the earliest S and now.
+local WG7 = {}
+ws.applyDialogue(WG7, 1, { timerMs = 7 * 60000 }, t("10:00:00"))   -- S 10:07..10:08
+ws.tick(WG7, t("10:08:00"), nil)
+check("G7 sapling by the timer", WG7[1].status, "sapling")
+ws.applyDialogue(WG7, 1, CROWN_TREE, t("10:10:00"))
+check("G7 alive", WG7[1].status, "alive")
+checkTime("G7 M no earlier than S", WG7[1].matureEarliest, "10:07:00")
+checkTime("G7 M no later than now", WG7[1].matureLatest, "10:10:00")
+check("G7 still trusted for lightning", (ws.nextEvent(WG7[1], t("10:10:00"))), "lightning")
+
+-- The edges of "trusted": a sapling greeting alone (S in the last 5 min, so
+-- a 5 min window for M) is enough; a full tree seen alone (11 min) is not.
+local WG8 = {}
+ws.applyDialogue(WG8, 1, sap, t("10:00:00"))
+ws.tick(WG8, t("10:05:00"), nil)
+check("G8 sapling greeting grows up", WG8[1].status, "alive")
+check("G8 5 min window is trusted", (ws.nextEvent(WG8[1], t("10:05:00"))), "lightning")
+local WG9 = {}
+ws.applyTreeLoc(WG9, 1, "seen", OAK, 1, 1, nil, t("10:00:00"))
+check("G9 full tree alone: only dies within", (ws.nextEvent(WG9[1], t("10:00:00"))), "dies within")
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

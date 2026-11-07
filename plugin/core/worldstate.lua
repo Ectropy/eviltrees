@@ -53,6 +53,8 @@
       - Nurturing makes saplings grow faster, so a sapling stage only says
         how OLD the tree can be at most. We still guess "not nurtured", but
         only inside the window.
+      - From S we assume the sapling is NOT nurtured: M = S + 5 min. At
+        worst it grew up sooner, and a sighting corrects that.
       - A lightning strike we see (the NPC "Thor" at the tree) pins the beat
         to the second, and tells us M to within a minute.
       - Strikes only happen to a tree that is still ABOVE the threshold:
@@ -106,11 +108,16 @@ local DEAD_MS = 10 * MINUTE
 local JITTER_MS = 2 * SECOND
 -- A strike and the health-stage change it causes arrive within this time.
 local PAIR_MS = 2 * SECOND
--- The widest window for M we still predict lightning from. A spawn timer
--- gives S to within 1-2 minutes, and an unnurtured sapling grows up 5 min
--- later, so "timer, then the crown says it's a tree" fits. "The spirit tree
--- says it's alive" (31 min) or "we saw it at full health" (11 min) does not.
-local TRUSTED_WINDOW_MS = 7 * MINUTE
+-- How unsure we may be about M and still show lightning times: one sapling's
+-- growing time. Any window that started from a spawn time fits in it; a
+-- tree first met fully grown doesn't. The windows we get:
+--   - watched it grow up, or saw a strike:          about 1 min
+--   - a spawn timer (assumed not nurtured):         1-2 min
+--   - a timer, then found grown early (nurtured):   under 5 min (S to now)
+--   - a sapling seen or greeted, no timer:          up to 5 min
+--   - "we saw it at full health":                   11 min (too wide)
+--   - "the spirit tree says it's alive":            31 min (too wide)
+local TRUSTED_WINDOW_MS = SAPLING_MATURE_MS
 -- A window for M this narrow (a strike we saw) gives times to the second,
 -- once the beat is known.
 local EXACT_WINDOW_MS = MINUTE + 2 * JITTER_MS
@@ -413,27 +420,38 @@ local function becomeSapling(record, now)
     narrow(record, "spawn", now - SAPLING_MATURE_MS, now)
 end
 
--- First guess at M, from S: not nurtured, M = S + 5 min. Nurtured, sooner,
--- but not before S. Only used when we have no window for M yet.
+-- First guess at M, from S. We assume nobody nurtured the sapling, so
+-- M = S + 5 min, and the window for M is the window for S moved 5 min on.
+-- (Nurturing would make M sooner. If someone sees the tree already grown,
+-- that sighting doesn't fit this window and replaces it: see becomeAlive.)
+-- Only used when we have no window for M yet.
 local function seedMatureFromSpawn(record)
     if record.matureEarliest ~= nil or record.spawnAt == nil then
         return
     end
     local spawnEarliest = record.spawnEarliest or record.spawnAt
     local spawnLatest = record.spawnLatest or record.spawnAt
-    narrow(record, "mature", spawnEarliest, spawnLatest + SAPLING_MATURE_MS)
+    narrow(record, "mature", spawnEarliest + SAPLING_MATURE_MS, spawnLatest + SAPLING_MATURE_MS)
     choose(record, "mature", nil, record.spawnAt + SAPLING_MATURE_MS)
 end
 
 -- The tree is a full ("alive") tree: it matured no later than now, and no
--- earlier than its health allows (see earliestMature). Safe to call again
--- on a tree that's already alive: it only narrows the window.
+-- earlier than its health allows (see earliestMature) or than it spawned.
+-- Safe to call again on a tree that's already alive: it only narrows the
+-- window.
 local function becomeAlive(record, now, health)
     -- If our timers had already declared it dead, they were wrong: same tree.
     record.deadAt = nil
     record.status = "alive"
     seedMatureFromSpawn(record)
-    narrow(record, "mature", earliestMature(health, now), now)
+    local earliest = earliestMature(health, now)
+    -- It can't have matured before it spawned. This matters when it grew up
+    -- sooner than S + 5 (nurtured): then this sighting replaces the
+    -- unnurtured window, and S still keeps the new window small.
+    if record.spawnEarliest ~= nil and record.spawnEarliest <= now then
+        earliest = math.max(earliest, record.spawnEarliest)
+    end
+    narrow(record, "mature", earliest, now)
     choose(record, "mature")
 end
 
