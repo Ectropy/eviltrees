@@ -712,6 +712,11 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
         -- a different loc (== on tables compares identity, as in JS).
         local watchedChange = previous ~= nil and previous ~= info
 
+        -- A grown, dying or dead loc names its tree type; a different type
+        -- from the one we have means a new tree. (Sapling locs have no type,
+        -- so for them this does nothing.)
+        forgetIfOtherType(record, info.treeType)
+
         if info.stage == "sapling" then
             becomeSapling(record, now)
             -- Without nurturing, stage N starts (N-1) minutes after S.
@@ -735,7 +740,6 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
             end
 
         elseif info.stage == "alive" then
-            forgetIfOtherType(record, info.treeType)
             -- The stage's cap works like a health reading: the full tree
             -- (cap 100) has over 50%, _LVL2 (cap 50) over 25%.
             becomeAlive(record, now, info.healthCap)
@@ -755,23 +759,21 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
                     learnStrike(record, strikeForCap(info.healthCap), now, clockSlack)
                 end
             end
-            record.treeType = info.treeType
             applyStageCap(record, info.healthCap)
 
         elseif info.stage == "dying" then
             -- The dying loc only lasts a few seconds, so it died just now
             -- (by lightning if a strike came with it, else felled).
-            forgetIfOtherType(record, info.treeType)
             record.deadAt = now
             becomeDead(record, now)
-            record.treeType = info.treeType
 
         elseif info.stage == "dead" then
-            forgetIfOtherType(record, info.treeType)
             becomeDead(record, now)     -- keeps deadAt if the dying loc set it
-            record.treeType = info.treeType
         end
 
+        if info.treeType ~= nil then
+            record.treeType = info.treeType
+        end
         record.tileX = tileX
         record.tileZ = tileZ
     end)
