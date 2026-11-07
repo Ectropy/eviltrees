@@ -16,7 +16,8 @@
 
     Reports go to the callback given to trees.setOnEvent(), as
         onEvent(kind, info, tileX, tileZ, previous)
-    where kind is "seen", "fading" or "removed", info is the data/trees.lua
+    where kind is "seen", "fading", "removed" or "unloaded" (we left it, see
+    below; only for the capture log, it says nothing about the tree), info is the data/trees.lua
     entry (treeType, stage, healthCap, saplingLevel), and previous is the
     info of the loc this one just replaced (see below), or nil.
 
@@ -29,6 +30,13 @@
     a new evil tree loc appears close by in that time, it's reported with
     previous = the removed one. A LocAdded straight onto the tile of a
     tracked tree (no LocRemoved) is a change too.
+
+    Leaving: the beta logs show NO LocRemoved when you walk or teleport
+    away. On the way back the tree is simply "seen" again (W204 oak,
+    2026-11-07). So each server tick we ask the game (LocList) whether every
+    tracked tree is still loaded, and quietly drop any that isn't (see
+    forgetUnloaded). Otherwise the plugin would think the tree is still in
+    view and pause its timers, and the countdown would sit at 0:00.
 ]]
 
 local safe = require("core/safe")
@@ -40,7 +48,7 @@ local REPLACE_WINDOW_TICKS = 2  -- server ticks (~1.2 s) a removed tree is remem
 local REPLACE_MAX_TILES = 2     -- how far the replacement may be from the old tile
 
 local onEvent = nil     -- function(kind, info, tileX, tileZ, previous), set by main.lua
-local tracked = {}      -- [tile key] = { info, x, z } for each evil tree loc in view
+local tracked = {}      -- [tile key] = { info, configId, x, z } for each evil tree loc in view
 local justRemoved = {}  -- list of { info, x, z, tick } for recently removed trees
 local serverTick = 0
 
@@ -51,8 +59,15 @@ local function tileKey(coord)
 end
 
 -- Starts tracking the evil tree loc on this tile (replacing any before it).
-local function track(coord, info)
-    tracked[tileKey(coord)] = { info = info, x = coord.x, z = coord.z }
+-- configId is the loc's ID, kept so forgetUnloaded can look it up again.
+local function track(coord, info, configId)
+    tracked[tileKey(coord)] = { info = info, configId = configId, x = coord.x, z = coord.z }
+end
+
+-- Remembers a tree that just went away, for a couple of server ticks, so a
+-- new stage appearing on (nearly) the same tile counts as a replacement.
+local function rememberRemoved(entry)
+    justRemoved[#justRemoved + 1] = { info = entry.info, x = entry.x, z = entry.z, tick = serverTick }
 end
 
 -- True if a remembered tree (an entry of tracked or justRemoved) is at most
@@ -119,9 +134,51 @@ function trees.isNearTree(x, z, maxTiles)
     return false
 end
 
--- Event.ServerLogic handler: lets old "just removed" entries expire.
+-- True if the game still has this tracked tree's loc loaded: LocList finds a
+-- valid loc with its ID on its tile. Returns nil if we couldn't ask (the
+-- call failed), so the caller can tell "no" from "don't know".
+local function isStillLoaded(entry)
+    -- pcall returns ok (did it run without an error?) plus the result,
+    -- like try { result = ... } catch { ok = false } in JS.
+    local ok, found = pcall(function() return LocList.ByConfigID(entry.configId) end)
+    if not ok then
+        return nil
+    end
+    -- "found or {}" covers the call returning nil when there are none.
+    for _, loc in ipairs(found or {}) do
+        local here = safe.try(function()
+            return loc.isValid and loc.coordGrid.x == entry.x and loc.coordGrid.z == entry.z
+        end)
+        if here then
+            return true
+        end
+    end
+    return false
+end
+
+-- Drops tracked trees the game no longer has loaded: you walked or
+-- teleported away (no LocRemoved comes for that, see the header). It's
+-- reported as "unloaded" so the capture log shows when it happened, but
+-- that tells us nothing about the tree itself. It's still remembered as "just removed" for a moment, in case it
+-- was really a stage change that we happened to check halfway through.
+-- If we can't ask the game (the call fails), the tree is kept.
+-- Setting a field to nil while pairs() walks the table is allowed in Lua
+-- (only adding new keys during the walk isn't).
+local function forgetUnloaded()
+    for key, entry in pairs(tracked) do
+        if isStillLoaded(entry) == false then
+            tracked[key] = nil
+            rememberRemoved(entry)
+            report("unloaded", entry.info, { x = entry.x, z = entry.z })
+        end
+    end
+end
+
+-- Event.ServerLogic handler: drops trees we've walked away from, and lets
+-- old "just removed" entries expire.
 function trees.onServerTick()
     serverTick = serverTick + 1
+    forgetUnloaded()
     -- Walk the list backwards so removing an entry doesn't skip the next one.
     -- "for i = a, b, -1" counts down from a to b, like for (i = a; i >= b; i--).
     for index = #justRemoved, 1, -1 do
@@ -146,7 +203,7 @@ function trees.onLocAdded(event)
     if previous == nil and old ~= nil and old.info ~= info then
         previous = old.info
     end
-    track(event.coordGrid, info)
+    track(event.coordGrid, info, configId)
     report("seen", info, event.coordGrid, previous)
 end
 
@@ -159,7 +216,7 @@ function trees.onLocRemoved(event)
         return
     end
     tracked[key] = nil
-    justRemoved[#justRemoved + 1] = { info = entry.info, x = coord.x, z = coord.z, tick = serverTick }
+    rememberRemoved(entry)
     report("removed", entry.info, coord)
 end
 
@@ -183,7 +240,7 @@ function trees.scanNearby()
         local found = safe.try(function() return LocList.ByConfigID(locId) end) or {}
         for _, loc in ipairs(found) do
             if loc.isValid then
-                track(loc.coordGrid, info)
+                track(loc.coordGrid, info, locId)
                 report("seen", info, loc.coordGrid)
             end
         end

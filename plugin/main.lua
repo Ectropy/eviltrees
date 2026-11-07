@@ -388,7 +388,8 @@ chat.setOnText(function(text)
     noteChange(worldstate.applyDialogue(store.worlds, currentWorld.number, facts, clock.now()))
 end)
 
--- An evil tree object appeared, faded or was removed near the player.
+-- An evil tree object appeared, faded or was removed near the player, or
+-- we left it ("unloaded": logged only, it says nothing about the tree).
 -- previous is set when we watched this loc replace an older stage.
 trees.setOnEvent(function(kind, info, tileX, tileZ, previous)
     local what = info.stage
@@ -407,6 +408,9 @@ trees.setOnEvent(function(kind, info, tileX, tileZ, previous)
         from = " (replaced " .. previous.stage .. (previous.saplingLevel or "") .. ")"
     end
     addCapture("tree " .. kind .. ": " .. what .. " at " .. tileX .. "," .. tileZ .. from)
+    if kind == "unloaded" then
+        return
+    end
     noteChange(worldstate.applyTreeLoc(store.worlds, currentWorld.number, kind, info,
         tileX, tileZ, previous, clock.now(), clock.isSynced()))
 end)

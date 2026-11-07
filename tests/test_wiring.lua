@@ -77,6 +77,43 @@ trees.onServerTick(); trees.onServerTick(); trees.onServerTick()
 check("T9 just-removed expired", trees.isNearTree(2602, 3118, 3), false)
 trees.reset()
 
+-- Walking away sends no LocRemoved: each server tick asks LocList whether
+-- the tree is still loaded, and quietly drops it if not.
+local loaded = {}       -- loaded[locId] = list of locs, like LocList returns
+LocList = { ByConfigID = function(locId) return loaded[locId] end }
+trees.onLocAdded(ev(11437, 2913, 2896))                 -- oak, full
+loaded[11437] = { { isValid = true, coordGrid = { x = 2913, z = 2896, level = 0 } } }
+n = #events
+trees.onServerTick()
+check("T10 still loaded: kept", trees.isTreeInView(), true)
+loaded[11437] = nil                                     -- teleported away
+trees.onServerTick()
+check("T10 unloaded: dropped", trees.isTreeInView(), false)
+check("T10 reported once", #events, n + 1)
+check("T10 as unloaded", last().kind, "unloaded")
+check("T10 at its tile", last().x, 2913)
+for _ = 1, 5 do trees.onServerTick() end
+trees.onLocAdded(ev(11439, 2913, 2896))                 -- back later: _LVL3
+check("T10 back later: first sight", last().previous, nil)
+loaded[11439] = { { isValid = false, coordGrid = { x = 2913, z = 2896, level = 0 } } }
+trees.onServerTick()
+check("T11 invalid loc: dropped", trees.isTreeInView(), false)
+trees.onLocAdded(ev(11437, 2913, 2896))
+loaded[11437] = { { isValid = true, coordGrid = { x = 3000, z = 3000, level = 0 } } }
+trees.onServerTick()
+check("T12 same ID elsewhere: dropped", trees.isTreeInView(), false)
+-- Checked halfway through a stage change: the new stage still pairs up.
+trees.onLocAdded(ev(11438, 2913, 2896))                 -- oak _LVL2, not in LocList yet
+trees.onServerTick()
+trees.onLocAdded(ev(11439, 2913, 2896))
+check("T13 stage change still paired", last().previous and last().previous.healthCap, 50)
+-- If asking the game fails, the tree is kept.
+LocList = { ByConfigID = function() error("not ready") end }
+trees.onServerTick()
+check("T14 call failed: kept", trees.isTreeInView(), true)
+LocList = nil
+trees.reset()
+
 ---------------------------------------------------------------- main.lua smoke
 local game = require("fakegame")   -- stubs every game global (tests/fakegame.lua)
 local handlers, errors, saved, interfaces = game.handlers, game.errors, game.saved, game.interfaces
@@ -112,6 +149,8 @@ interfaces["1184:4"] = nil; interfaces["1184:10"] = nil
 handlers.VarTransmit({ var = { id = 2251, typeName = "VarClient" }, newValue = "A strange sapling emerging from the ground." })
 logic(60)                -- passes logicTick 50: tick + panel refresh
 handlers.LocRemoved({ coordGrid = { x = 2703, z = 3641, level = 0 } })
+game.locs[11393] = nil
+game.locs[11394] = { { isValid = true, coordGrid = { x = 2702, z = 3640, level = 0 } } }  -- sapling 4
 handlers.LocAdded({ config = { id = 11394 }, coordGrid = { x = 2702, z = 3640, level = 0 } })
 check("M3 tile", store.worlds[204].tileX, 2702)
 
@@ -146,8 +185,15 @@ server(20)
 handlers.NPCEntityAdded({ npcEntity = { configID = 416, uid = 4, coordGrid = { x = 2750, z = 3700, level = 0 } } })
 check("M7b far Thor ignored", store.worlds[204].strikeSeenAt, firstStrike)
 
+-- walking away: the tree is no longer loaded. Logged, record unchanged.
+local recordBefore = store.worlds[204]
+game.locs[11394] = nil
+server(1)
+check("M8 unloaded leaves the record alone", store.worlds[204], recordBefore)
+
 PluginShutdown()
 check("M4 saved worlds", type(saved.worlds), "table")
+check("M8 log shows unloaded", saved.captureLog ~= nil and string.find(saved.captureLog, "tree unloaded: sapling 4/5 at 2702,3640", 1, true) ~= nil, true)
 check("M4 log has merges", saved.captureLog ~= nil and string.find(saved.captureLog, "-> record now", 1, true) ~= nil, true)
 check("M4 log shows replacement", saved.captureLog ~= nil and string.find(saved.captureLog, "(replaced sapling3)", 1, true) ~= nil, true)
 check("M5 no errors", #errors, 0)
