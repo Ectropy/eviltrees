@@ -23,8 +23,9 @@
                       the window M must lie in
         matureSource  what last narrowed that window. Seen: "watched" (saw
                       it grow up) | "strike" (saw Thor). Inferred:
-                      "fromSpawn" (S + 5, assuming no nurturing) | "alive"
-                      (only seen or told that it's a full tree)
+                      "fromSpawn" (S + 5, assuming no nurturing) | "health"
+                      (at or below 50% / 25%: strike 1 / 2 assumed done) |
+                      "alive" (only seen or told that it's a full tree)
         beatMs        the tree's once-a-minute "beat": the strikes and the
                       death happen at this many ms past a whole minute
                       (e.g. 32000 = at :32). nil until we know it.
@@ -82,6 +83,10 @@
             happened, even if M was as late as it can be,
           * the timed death uses the latest possible M, so a living tree
             is never declared dead.
+      - ONE DELIBERATE ASSUMPTION: a tree at or below 50% / 25% has had
+        strike 1 / 2 (see latestMature), even though chopping could also
+        explain it. A tree that dies sooner than shown is fine; one that
+        dies later than shown is not.
 
     How updates work (React developers: think of a reducer). Each change
     copies the record, edits the copy, and compares the copy with the
@@ -400,6 +405,24 @@ local function earliestMature(health, now)
     return now - DEATH_MS - MINUTE      -- any older and it would have died
 end
 
+-- The other end: how recently the tree can have matured, given its health
+-- right now. At or below 50% we take it that strike 1 (M + 10) has
+-- happened, so M was at least 10 min ago; at or below 25%, strike 2
+-- (M + 20), so at least 20 min ago. Players chopping can also bring the
+-- health down early, but we assume they then stay until the tree is dead,
+-- so it can't outlive what this says by much. (Decided 2026-11-07: thinking
+-- a tree will die later than it really does is worse than the other way
+-- round.) health may be nil (unknown). Returns the latest possible M.
+local function latestMature(health, now)
+    if health ~= nil and health <= STRIKE_2_HEALTH then
+        return now - STRIKE_2_MS
+    end
+    if health ~= nil and health <= STRIKE_1_HEALTH then
+        return now - STRIKE_1_MS
+    end
+    return now
+end
+
 -- The window for M that a strike seen at "at" gives, if it was strike k:
 -- that strike lands on the first beat at or after M + EVENT_DUE_MS[k]. clockSlack
 -- is extra room at the late end while the clock is only minute-accurate
@@ -481,10 +504,10 @@ local function seedMatureFromSpawn(record)
     choose(record, "mature", nil, record.spawnAt + SAPLING_MATURE_MS)
 end
 
--- The tree is a full ("alive") tree: it matured no later than now, and no
--- earlier than its health allows (see earliestMature) or than it spawned.
--- Safe to call again on a tree that's already alive: it only narrows the
--- window.
+-- The tree is a full ("alive") tree. It matured no earlier than its health
+-- allows (see earliestMature) or than it spawned, and no later than now,
+-- or than its health says (see latestMature). Safe to call again on a tree
+-- that's already alive: it only narrows the window.
 local function becomeAlive(record, now, health)
     -- If our timers had already declared it dead, they were wrong: same tree.
     record.deadAt = nil
@@ -497,7 +520,19 @@ local function becomeAlive(record, now, health)
     if record.spawnEarliest ~= nil and record.spawnEarliest <= now then
         earliest = math.max(earliest, record.spawnEarliest)
     end
-    narrow(record, "mature", earliest, now, "alive")
+    local latest = latestMature(health, now)
+    local source = "health"
+    if latest == now then
+        source = "alive"            -- the health says nothing about M's late end
+    elseif latest < earliest
+        or (record.matureEarliest ~= nil and latest < record.matureEarliest) then
+        -- What we already know (the spawn time, or M itself) says the tree
+        -- is too young for the strikes its health suggests, so players
+        -- chopped it: the assumption is wrong here, so drop it.
+        latest = now
+        source = "alive"
+    end
+    narrow(record, "mature", earliest, latest, source)
     choose(record, "mature")
 end
 

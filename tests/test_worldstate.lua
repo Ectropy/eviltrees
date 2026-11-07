@@ -605,6 +605,34 @@ local WI = { [1] = { status = "sapling", treeType = "elder", spawnAt = t("10:00:
 ws.applyDialogue(WI, 1, i2, t("10:02:00"))
 checkTime("I6 same type keeps spawn", WI[1].spawnAt, "10:00:00")
 
+---------------------------------------------------------------- D: low health assumes the strikes happened (W205 oak, 2026-11-07)
+-- Only told "alive", then found at <=25%: strike 2 assumed done, so it dies
+-- within 10 min (the real tree died 14 s later). Was "dies within 29 min".
+local WD = {}
+ws.applyDialogue(WD, 205, greet, t("16:18:06"), false)
+ws.applyTreeLoc(WD, 205, "seen", trees.byId[11439], 2760, 2697, nil, t("16:19:23"), true)   -- oak _LVL3
+check("D1 M source", WD[205].matureSource, "health")
+local ld, ad = ws.nextEvent(WD[205], t("16:19:23"))
+check("D1 dies within", ld, "dies within")
+checkTime("D1 at most 10 min", ad, "16:29:23")
+ws.applyExamine(WD, 205, parser.parseExamine("The tree currently has approximately 25% of its health remaining."), t("16:19:28"))
+ld, ad = ws.nextEvent(WD[205], t("16:19:28"))
+checkTime("D2 examine 25% keeps it", ad, "16:29:23")
+-- <=50%: strike 1 assumed done, dies within 20 min
+local WD3 = {}
+ws.applyDialogue(WD3, 1, greet, t("10:00:00"))
+ws.applyTreeLoc(WD3, 1, "seen", trees.byId[11438], 1, 1, nil, t("10:00:00"))                -- oak _LVL2
+ld, ad = ws.nextEvent(WD3[1], t("10:00:00"))
+checkTime("D3 <=50% dies within 20 min", ad, "10:20:00")
+-- a spawn timer says the tree is too young for strike 2: it was chopped,
+-- so the assumption is dropped and the timer's M stays
+local WD4 = {}
+ws.applyDialogue(WD4, 1, { timerMs = 7 * 60000 }, t("10:00:00"))   -- S 10:07..10:08, M 10:12..10:13
+ws.tick(WD4, t("10:20:00"), nil)
+ws.applyTreeLoc(WD4, 1, "seen", trees.byId[11439], 1, 1, nil, t("10:20:00"))                -- oak _LVL3
+check("D4 chopped: M source unchanged", WD4[1].matureSource, "fromSpawn")
+checkTime("D4 chopped: M from the timer", WD4[1].matureLatest, "10:13:00")
+
 ---------------------------------------------------------------- U: capitals never matter
 local u1 = parser.parseDialogue("SPIRIT TREE", "THERE WILL BE ANOTHER EVIL TREE IN APPROXIMATELY 1 HOUR AND 1 MINUTE.")
 check("U1 speaker and timer in capitals", u1 and u1.timerMs, 61 * 60000)
