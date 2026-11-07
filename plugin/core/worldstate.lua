@@ -45,7 +45,7 @@
       - M: full tree. Lightning at M + 10 and M + 20 min, death at M + 30,
         each moved to the first "beat" at or after that time (so up to 59 s
         later). Untouched, M = S + 5 and everything lands on the beat.
-      - Dead trunk (rewards) for about 10 min after death.
+      - Dead trunk (rewards) for 9:06 after death, then it fades out.
 
     The rule everything follows: SOMETHING SEEN BEATS A TIMED GUESS.
       - Each sighting or dialogue line narrows the window for S or M. For
@@ -100,8 +100,10 @@ local STRIKE_1_HEALTH = 50
 local STRIKE_2_MS = 20 * MINUTE
 local STRIKE_2_HEALTH = 25
 local DEATH_MS = 30 * MINUTE
--- The dead trunk (rewards) stays about 10 min. One beta observation: 9 +/- 1.
-local DEAD_MS = 10 * MINUTE
+-- The dead trunk (rewards) stays 9:06 after death, then fades out. Seen
+-- three times to the second in the beta (W204 willow, W205 elder, W204
+-- yew, 2026-11-06/07; also the W205 oak, 9 +/- 1 min). EctoTrees uses 10.
+local DEAD_MS = 9 * MINUTE + 6 * SECOND
 -- Events reach us on server ticks (0.6 s), so a time we saw can be up to
 -- about a second late. Rounding to the beat allows this much slack, so a
 -- slightly late M doesn't push a prediction a whole minute later.
@@ -456,7 +458,7 @@ local function becomeAlive(record, now, health)
 end
 
 -- The tree is dead (rewards available). Died no later than now, and no
--- earlier than 10 min ago (the trunk would be gone otherwise).
+-- earlier than DEAD_MS ago (the trunk would be gone otherwise).
 local function becomeDead(record, now)
     local deadAt = record.deadAt or now
     record.deadAt = clampTime(deadAt, now - DEAD_MS, now)

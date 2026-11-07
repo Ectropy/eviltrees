@@ -159,7 +159,7 @@ loc("seen", WILLOW_DEAD, WILLOW_DYING, "04:18:34", 2702, 3640)
 checkTime("A13 deadAt kept", W[204].deadAt, "04:18:32")
 local label13, at13 = ws.nextEvent(W[204])
 check("A13 next label", label13, "gone by")
-checkTime("A13 next at", at13, "04:28:32")
+checkTime("A13 next at: the real fade-out", at13, "04:27:38")
 
 check("A14 walking away changes nothing", loc("removed", WILLOW_DEAD, nil, "04:19:00"), false)
 check("A14 still dead", W[204].status, "dead")
@@ -428,7 +428,7 @@ ws.applyDialogue(WR2, 1, f, t("05:00:00"))
 check("R4 dead from nothing", WR2[1].status, "dead")
 local labelR, atR = ws.nextEvent(WR2[1])
 check("R4 next", labelR, "gone by")
-checkTime("R4 gone by at most 10 min", atR, "05:10:00")
+checkTime("R4 gone by at most 9:06", atR, "05:09:06")
 -- an out-of-date timer is dropped
 local WR3 = { [1] = { status = "none", spawnAt = t("06:00:00"), spawnEarliest = t("05:59:00"), spawnLatest = t("06:01:00"), hint = "h" } }
 ws.applyDialogue(WR3, 1, f, t("05:00:00"))

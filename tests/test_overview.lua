@@ -68,7 +68,7 @@ check("B6 sapling countdown", overview.countdownText(sapling, NOW), "Full tree i
 
 check("B7 dead heading", dead.heading, "W12 - Dead oak")
 check("B7 dead place: hint", dead.place, "Hint: Close to a large collection of willow trees")
-check("B7 dead countdown", overview.countdownText(dead, NOW), "Rewards gone in 6:00")
+check("B7 dead countdown", overview.countdownText(dead, NOW), "Rewards gone in 5:06")
 
 check("B8 spawn heading", spawning.heading, "W117 - No tree")
 check("B8 spawn place: two options", spawning.place,
