@@ -13,10 +13,18 @@
         spawnEarliest, spawnLatest
                       the window S must lie in, given everything seen so far
                       (spawnAt is always inside it)
+        spawnSource   what last narrowed that window: "timer" (spirit tree /
+                      crown / helm countdown) | "sapling" (a sapling seen,
+                      or said to exist) | "step" (watched a sapling stage
+                      change)
         matureAt      when the sapling became a full tree ("M"). Best estimate.
                       Lightning and death are timed from this.
         matureEarliest, matureLatest
                       the window M must lie in
+        matureSource  what last narrowed that window. Seen: "watched" (saw
+                      it grow up) | "strike" (saw Thor). Inferred:
+                      "fromSpawn" (S + 5, assuming no nurturing) | "alive"
+                      (only seen or told that it's a full tree)
         beatMs        the tree's once-a-minute "beat": the strikes and the
                       death happen at this many ms past a whole minute
                       (e.g. 32000 = at :32). nil until we know it.
@@ -178,7 +186,8 @@ end
 -- turns out to be a different tree), all of them go.
 local TREE_FIELDS = {
     "treeType", "hint", "locationClue", "tileX", "tileZ", "health", "healthSource",
-    "spawnAt", "spawnEarliest", "spawnLatest", "matureAt", "matureEarliest", "matureLatest",
+    "spawnAt", "spawnEarliest", "spawnLatest", "spawnSource",
+    "matureAt", "matureEarliest", "matureLatest", "matureSource",
     "beatMs", "strikeSeenAt", "stageDropAt", "stageDropCap", "stepSeenAt", "deadAt",
 }
 
@@ -237,7 +246,10 @@ end
 -- latest. The window only ever gets narrower. If the new observation
 -- contradicts the old window (something we assumed was wrong), the newest
 -- observation wins and the window starts again from it.
-local function narrow(record, name, earliest, latest)
+-- source names the observation (see spawnSource / matureSource in the
+-- header). It's recorded only if this observation changed the window, so
+-- a vaguer sighting later doesn't hide the one that gave us the time.
+local function narrow(record, name, earliest, latest, source)
     local oldEarliest = record[name .. "Earliest"]
     local oldLatest = record[name .. "Latest"]
     if oldEarliest ~= nil then
@@ -248,6 +260,9 @@ local function narrow(record, name, earliest, latest)
             latest = narrowedLatest
         end
         -- else: they don't overlap, so keep just the new observation's window
+    end
+    if earliest ~= oldEarliest or latest ~= oldLatest then
+        record[name .. "Source"] = source
     end
     record[name .. "Earliest"] = earliest
     record[name .. "Latest"] = latest
@@ -406,6 +421,7 @@ local function forgetMature(record)
     record.matureAt = nil
     record.matureEarliest = nil
     record.matureLatest = nil
+    record.matureSource = nil
     record.health = nil
     record.healthSource = nil
 end
@@ -419,7 +435,7 @@ local function becomeSapling(record, now)
         forgetMature(record)        -- our timers guessed it had grown up; it hasn't
     end
     record.status = "sapling"
-    narrow(record, "spawn", now - SAPLING_MATURE_MS, now)
+    narrow(record, "spawn", now - SAPLING_MATURE_MS, now, "sapling")
 end
 
 -- First guess at M, from S. We assume nobody nurtured the sapling, so
@@ -433,7 +449,7 @@ local function seedMatureFromSpawn(record)
     end
     local spawnEarliest = record.spawnEarliest or record.spawnAt
     local spawnLatest = record.spawnLatest or record.spawnAt
-    narrow(record, "mature", spawnEarliest + SAPLING_MATURE_MS, spawnLatest + SAPLING_MATURE_MS)
+    narrow(record, "mature", spawnEarliest + SAPLING_MATURE_MS, spawnLatest + SAPLING_MATURE_MS, "fromSpawn")
     choose(record, "mature", nil, record.spawnAt + SAPLING_MATURE_MS)
 end
 
@@ -453,7 +469,7 @@ local function becomeAlive(record, now, health)
     if record.spawnEarliest ~= nil and record.spawnEarliest <= now then
         earliest = math.max(earliest, record.spawnEarliest)
     end
-    narrow(record, "mature", earliest, now)
+    narrow(record, "mature", earliest, now, "alive")
     choose(record, "mature")
 end
 
@@ -471,7 +487,8 @@ end
 -- the health. A health that came from an earlier, wrong guess about which
 -- strike it was is replaced.
 local function learnStrike(record, k, at, clockSlack)
-    narrow(record, "mature", strikeWindow(k, at, clockSlack))
+    local earliest, latest = strikeWindow(k, at, clockSlack)
+    narrow(record, "mature", earliest, latest, "strike")
     -- Best guess: M was exactly 10k minutes before the strike. Then the next
     -- strike lands exactly 10 min after this one, on the same beat. (Keeping
     -- an older guess here could leave M at the window's early edge, and
@@ -514,6 +531,7 @@ function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
                 record.spawnAt = nil
                 record.spawnEarliest = nil
                 record.spawnLatest = nil
+                record.spawnSource = nil
             end
             becomeDead(record, now)
         end
@@ -537,7 +555,7 @@ function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
             -- a minute later: the spawn too. A wider window shows as "~".
             -- (Seen 2026-11-07: a W204 yew died 36 s after the window
             -- allowed; its timer was read just after a restart.)
-            narrow(record, "spawn", earliest, latest + clockSlackFor(secondsKnown))
+            narrow(record, "spawn", earliest, latest + clockSlackFor(secondsKnown), "timer")
             record.spawnAt = (record.spawnEarliest + record.spawnLatest) // 2
         end
 
@@ -683,7 +701,7 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
             -- S was at most N minutes ago (or N-1, if we watched it start).
             local stageStart = (info.saplingLevel - 1) * SAPLING_STAGE_MS
             if watchedChange then
-                narrow(record, "spawn", now - stageStart, now)
+                narrow(record, "spawn", now - stageStart, now, "step")
                 choose(record, "spawn", now - stageStart)
                 -- Two watched steps a minute apart: nobody is nurturing, so
                 -- the steps are on the tree's beat.
@@ -693,7 +711,7 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
                 end
                 record.stepSeenAt = now
             else
-                narrow(record, "spawn", now - info.saplingLevel * SAPLING_STAGE_MS, now)
+                narrow(record, "spawn", now - info.saplingLevel * SAPLING_STAGE_MS, now, "sapling")
                 -- Rough guess: halfway through the stage, not nurtured.
                 choose(record, "spawn", nil, now - stageStart - SAPLING_STAGE_MS // 2)
             end
@@ -706,7 +724,7 @@ function worldstate.applyTreeLoc(worlds, world, kind, info, tileX, tileZ, previo
             if watchedChange and previous.stage == "sapling" then
                 -- Watched it grow up: that's M, to the second (or within
                 -- the minute, if our clock only knows the minute yet).
-                narrow(record, "mature", now, now + clockSlack)
+                narrow(record, "mature", now, now + clockSlack, "watched")
                 choose(record, "mature", now)
             elseif watchedChange and previous.healthCap ~= nil and info.healthCap < previous.healthCap then
                 -- Watched the health stage drop. With a strike in the same

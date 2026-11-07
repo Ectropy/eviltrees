@@ -148,6 +148,13 @@ local function describeRecord(record)
     if record.beatMs ~= nil then
         text = text .. " | beat :" .. string.format("%02d", record.beatMs // 1000)
     end
+    -- Where the spawn (S) and maturing (M) times came from, e.g. "S timer, M strike".
+    if record.spawnSource ~= nil or record.matureSource ~= nil then
+        local from = {}
+        if record.spawnSource ~= nil then from[#from + 1] = "S " .. record.spawnSource end
+        if record.matureSource ~= nil then from[#from + 1] = "M " .. record.matureSource end
+        text = text .. " | " .. table.concat(from, ", ")
+    end
     if record.locationClue ~= nil then
         text = text .. " | at '" .. record.locationClue .. "'"
     elseif record.hint ~= nil then
