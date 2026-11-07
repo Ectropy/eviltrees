@@ -602,5 +602,21 @@ local WI = { [1] = { status = "sapling", treeType = "elder", spawnAt = t("10:00:
 ws.applyDialogue(WI, 1, i2, t("10:02:00"))
 checkTime("I6 same type keeps spawn", WI[1].spawnAt, "10:00:00")
 
+---------------------------------------------------------------- U: capitals never matter
+local u1 = parser.parseDialogue("SPIRIT TREE", "THERE WILL BE ANOTHER EVIL TREE IN APPROXIMATELY 1 HOUR AND 1 MINUTE.")
+check("U1 speaker and timer in capitals", u1 and u1.timerMs, 61 * 60000)
+local u2 = parser.parseDialogue("Queen of Sunrise", "NASTY SPIRITS HAVE GOT AT A Willow TREE SAPLING. it CAN be found north as the crow flies from Seers' Village.")
+check("U2 type", u2 and u2.treeType, "willow")
+check("U2 sapling", u2 and u2.isSapling, true)
+check("U2 hint keeps the game's capitals", u2 and u2.hint, "north as the crow flies from Seers' Village")
+local u3 = parser.parseDialogue("Spirit tree", "It is an abomination of nature, WHICH HAS APPEARED beside the west gates of Yanille. You should go and help.")
+check("U3 clue keeps the game's capitals", u3 and u3.locationClue, "beside the west gates of Yanille")
+local u4 = parser.parseDialogue(parser.MESSAGE_BOX_SPEAKER, "Nasty Spirits have got at an oak tree.")
+check("U4 helm filter ignores capitals", u4 and u4.treeType, "oak")
+check("U4b helm ignores other text", parser.parseDialogue(parser.MESSAGE_BOX_SPEAKER, "You can't do that right now."), nil)
+check("U5 examine health", (parser.parseExamine("THE TREE CURRENTLY HAS APPROXIMATELY 25% OF ITS HEALTH REMAINING.") or {}).health, 25)
+check("U6 examine rewards", (parser.parseExamine("LOOKS LIKE THERE'S REWARDS TO BE HAD!") or {}).deadWithRewards, true)
+check("U7 nil speaker", parser.parseDialogue(nil, "It can be found somewhere."), nil)
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

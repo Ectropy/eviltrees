@@ -53,7 +53,8 @@ local function readWorldNumber()
     end
     -- "%d+" means "one or more digits"; the brackets capture just the number.
     -- tonumber turns the captured text "205" into the number 205.
-    return tonumber(string.match(text, "RuneScape (%d+)"))
+    -- Matched on a lower-case copy, so capitals don't matter.
+    return tonumber(string.match(string.lower(text), "runescape (%d+)"))
 end
 
 -- Stores the new world and tells the listener if it changed.

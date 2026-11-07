@@ -324,8 +324,10 @@ dialogue.setOnPage(function(speaker, text)
     local facts = parser.parseDialogue(speaker, text)
     if facts == nil then
         -- Not a page we understand. Log Spirit tree / Queen of Sunrise pages
-        -- anyway (e.g. sapling-stage wording we haven't seen yet).
-        if speaker == "Spirit tree" or speaker == "Queen of Sunrise" then
+        -- anyway (e.g. sapling-stage wording we haven't seen yet). Capitals
+        -- don't matter, as in parser.lua.
+        local who = string.lower(speaker)
+        if who == "spirit tree" or who == "queen of sunrise" then
             addCapture(speaker .. " (unrecognised)", text)
         end
         return

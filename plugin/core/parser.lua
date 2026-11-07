@@ -16,20 +16,27 @@
         *    zero or more     (greedy)      ?  optional (one character only)
         (..) captures that part, which string.match returns
     Example: string.match("in 42 minutes", "(%d+) minutes") returns "42".
+
+    Capitals never matter: each function makes a lower-case copy of the
+    game text and matches lower-case patterns against it (Lua patterns have
+    no "i" flag like JS's /.../i). So a capital that differs from what we
+    expected, in the game or in our own strings, can't break a match. Text
+    we keep and show (the hint, the location clue) is cut from the original,
+    so it keeps the game's capitals.
 ]]
 
 local parser = {}
 
 local MS_PER_MINUTE = 60000
 
--- Who we listen to in dialogue, and a short name for each.
--- The Nature's Sentinel helm uses a plain message box with no speaker; the
--- capture code passes MESSAGE_BOX_SPEAKER as the speaker for those.
+-- Who we listen to in dialogue (speaker names in lower case), and a short
+-- name for each. The Nature's Sentinel helm uses a plain message box with no
+-- speaker; the capture code passes MESSAGE_BOX_SPEAKER as the speaker for those.
 parser.MESSAGE_BOX_SPEAKER = "(message box)"
 
 local SOURCES = {
-    ["Spirit tree"] = "spirit tree",
-    ["Queen of Sunrise"] = "sunbeam crown",
+    ["spirit tree"] = "spirit tree",
+    ["queen of sunrise"] = "sunbeam crown",
     [parser.MESSAGE_BOX_SPEAKER] = "sentinel helm",
 }
 
@@ -52,22 +59,44 @@ function parser.plainText(text)
     return text
 end
 
+-- True if lower (lower-case text) contains phrase as plain text.
+-- string.find(text, phrase, 1, true) searches from character 1 with
+-- patterns turned off (the "true"), like text.includes(phrase) in JS.
+local function contains(lower, phrase)
+    return string.find(lower, phrase, 1, true) ~= nil
+end
+
+-- Finds pattern in lower (the lower-case copy of text) and returns the part
+-- between the pattern's two "()" markers, cut from the original text so the
+-- game's capitals are kept (e.g. "Seers' Village"). In a Lua pattern, "()"
+-- captures a position (a character number) instead of text. string.lower
+-- never changes the length, so a position in lower is the same in text.
+-- string.sub(text, a, b) is text.slice(a - 1, b) in JS.
+local function cutKeepingCase(text, lower, pattern)
+    local first, after = string.match(lower, pattern)
+    if first == nil then
+        return nil
+    end
+    return string.sub(text, first, after - 1)
+end
+
 -- "approximately 1 hour and 42 minutes" -> milliseconds, or nil if not found.
 -- Mirrors EctoTrees' alt1-plugin/src/parser.ts, including its quirk that
 -- "approximately 0 minutes" means 60 minutes.
 -- "hours?" means "hour" with an optional "s".
 function parser.spawnTimerMs(text)
-    local hours, minutes = string.match(text, "approximately (%d+) hours? and (%d+) minutes?")
+    local lower = string.lower(text)
+    local hours, minutes = string.match(lower, "approximately (%d+) hours? and (%d+) minutes?")
     if hours ~= nil then
         return (tonumber(hours) * 60 + tonumber(minutes)) * MS_PER_MINUTE
     end
 
-    hours = string.match(text, "approximately (%d+) hours?%.")
+    hours = string.match(lower, "approximately (%d+) hours?%.")
     if hours ~= nil then
         return tonumber(hours) * 60 * MS_PER_MINUTE
     end
 
-    minutes = string.match(text, "approximately (%d+) minutes?")
+    minutes = string.match(lower, "approximately (%d+) minutes?")
     if minutes ~= nil then
         minutes = tonumber(minutes)
         if minutes == 0 then
@@ -95,16 +124,19 @@ end
 --   isSapling    true if the crown / helm says it's still a sapling
 --                (only set together with treeType)
 function parser.parseDialogue(speaker, text)
-    local source = SOURCES[speaker]
-    if source == nil or text == nil then
+    if speaker == nil or text == nil then
         return nil
     end
+    local source = SOURCES[string.lower(speaker)]
+    if source == nil then
+        return nil
+    end
+    local lower = string.lower(text)
     -- Message boxes show all sorts of game text, so only accept ones that are
     -- clearly about evil trees (the helm uses the same wording as the crown).
     if speaker == parser.MESSAGE_BOX_SPEAKER
-        and not string.find(text, "evil tree", 1, true)
-        and not string.find(text, "nasty spirits", 1, true)
-        and not string.find(text, "Nasty spirits", 1, true) then
+        and not contains(lower, "evil tree")
+        and not contains(lower, "nasty spirits") then
         return nil
     end
 
@@ -120,13 +152,13 @@ function parser.parseDialogue(speaker, text)
     -- not currently on the land. There won't be another evil tree for a long
     -- time." This means the dead trunk is still there (the rewards window),
     -- and the hint on the next page is for THAT tree, not a new one.
-    if string.find(text, "for a long time", 1, true) then
+    if contains(lower, "for a long time") then
         facts.rewardsWindow = true
         found = true
     -- Spirit tree: "The taint of the evil tree is not currently on the land."
     -- Crown: "There are no nasty spirits possessing trees right now!"
-    elseif string.find(text, "not currently on the land", 1, true)
-        or string.find(text, "no nasty spirits", 1, true) then
+    elseif contains(lower, "not currently on the land")
+        or contains(lower, "no nasty spirits") then
         facts.noTree = true
         found = true
     end
@@ -134,35 +166,36 @@ function parser.parseDialogue(speaker, text)
     -- Spirit tree greetings ("...Do you wish to travel, or ..."):
     --   "...or are you here to help dispatch the evil tree?"   = tree is alive
     --   "...or are you interested in the strange sapling?"     = it's a sapling
-    if string.find(text, "help dispatch the evil tree", 1, true) then
+    if contains(lower, "help dispatch the evil tree") then
         facts.treeAlive = true
         found = true
-    elseif string.find(text, "interested in the strange sapling", 1, true) then
+    elseif contains(lower, "interested in the strange sapling") then
         facts.saplingExists = true
         found = true
     end
 
     -- "It can be found north as the crow flies from Seers' Village."
-    -- (.-) takes the shortest text up to the final full stop.
-    facts.hint = string.match(text, "It can be found (.-)%.%s*$")
+    -- ".-" takes the shortest text up to the final full stop; the "()"
+    -- markers around it say which part to keep (see cutKeepingCase).
+    facts.hint = cutKeepingCase(text, lower, "it can be found ().-()%.%s*$")
     if facts.hint ~= nil then
         found = true
     end
 
     -- "...which has appeared beside the west gates of Yanille. You should go..."
-    facts.locationClue = string.match(text, "which has appeared (.-)%.")
+    facts.locationClue = cutKeepingCase(text, lower, "which has appeared ().-()%.")
     if facts.locationClue ~= nil then
         found = true
     end
 
     -- "Nasty spirits have got at an oak tree." / "...got at a tree."
     -- "an?" = "a" with an optional "n"; (%a*) is the type word, possibly empty.
-    local treeWord = string.match(text, "got at an? (%a*) ?tree")
-    if treeWord ~= nil and TREE_WORDS[string.lower(treeWord)] ~= nil then
-        facts.treeType = TREE_WORDS[string.lower(treeWord)]
+    local treeWord = string.match(lower, "got at an? (%a*) ?tree")
+    if treeWord ~= nil and TREE_WORDS[treeWord] ~= nil then
+        facts.treeType = TREE_WORDS[treeWord]
         -- "...got at a willow tree sapling." = still growing;
         -- "...got at a willow tree." = mature.
-        facts.isSapling = string.find(text, "tree sapling", 1, true) ~= nil
+        facts.isSapling = contains(lower, "tree sapling")
         found = true
     end
 
@@ -184,9 +217,6 @@ function parser.parseInspect(text)
     if text == nil then
         return nil
     end
-    -- We haven't captured this message through the chat event yet, so its
-    -- exact capitals aren't known. Matching on a lower-case copy makes the
-    -- check case-insensitive (Lua patterns have no "i" flag like JS's /.../i).
     local lower = string.lower(text)
     local treeWord = string.match(lower, "this sapling will grow into an? evil (%a*) ?tree")
     if treeWord == nil or TREE_WORDS[treeWord] == nil then
@@ -207,19 +237,20 @@ function parser.parseExamine(text)
         return nil
     end
     -- "The tree currently has approximately 25% of its health remaining."
-    local health = string.match(text, "approximately (%d+)%% of its health")
+    local lower = string.lower(text)
+    local health = string.match(lower, "approximately (%d+)%% of its health")
     if health ~= nil then
         return { health = tonumber(health) }
     end
     -- Examining the dead trunk: "Looks like there's rewards to be had!"
-    if string.find(text, "rewards to be had", 1, true) then
+    if contains(lower, "rewards to be had") then
         return { deadWithRewards = true }
     end
     -- The same trunk once your rewards are gone (seen W205, 2026-11-06):
     -- "It looks better dead than alive." This wording may be shared with
     -- other dead things, so worldstate ignores it; it's only recognised
     -- to keep the capture log readable.
-    if string.find(text, "It looks better dead than alive", 1, true) then
+    if contains(lower, "it looks better dead than alive") then
         return { deadNoRewards = true }
     end
     return nil
