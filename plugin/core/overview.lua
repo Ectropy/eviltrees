@@ -82,13 +82,14 @@ local function describeHealth(record)
 end
 
 -- Where the tree is (or will be): the exact place if we know it, else the
--- places the hint can mean, else the hint itself. nil if we know nothing.
+-- places the hints leave (see location.forHints), else the newest hint
+-- itself. nil if we know nothing.
 local function describePlace(record)
     local name = location.forRecord(record)
     if name ~= nil then
         return name
     end
-    local candidates = location.forHint(record.hint)
+    local candidates = location.forHints(record)
     if #candidates == 2 or #candidates == 3 then
         return table.concat(candidates, " or ")     -- like candidates.join(" or ")
     end

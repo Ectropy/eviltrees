@@ -57,6 +57,7 @@ local clock = require("core/clock")
 local store = require("core/store")
 local parser = require("core/parser")
 local worldstate = require("core/worldstate")
+local location = require("core/location")
 local capturelog = require("core/capturelog")
 local currentWorld = require("capture/currentworld")
 local dialogue = require("capture/dialogue")
@@ -156,6 +157,13 @@ local function describeRecord(record)
         text = text .. " | at '" .. record.locationClue .. "'"
     elseif record.hint ~= nil then
         text = text .. " | hint '" .. record.hint .. "'"
+        -- Earlier, different hints and where they all point, e.g.
+        -- " (+ 'on the island known as Karamja') -> Kharazi Jungle, ...".
+        -- table.concat(list, ", ") is list.join(", ").
+        if record.earlierHints ~= nil then
+            text = text .. " (+ '" .. table.concat(record.earlierHints, "', '") .. "')"
+                .. " -> " .. table.concat(location.forHints(record), " or ")
+        end
     end
     if record.tileX ~= nil then
         text = text .. " | tile " .. record.tileX .. "," .. record.tileZ

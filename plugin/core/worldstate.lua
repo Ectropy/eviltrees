@@ -31,7 +31,12 @@
                       when we last watched the health stage drop, and to
                       which cap (50 or 25); pairs a drop with a strike
         treeType      "tree" | "oak" | "willow" | "maple" | "yew" | "magic" | "elder"
-        hint          "north as the crow flies from Seers' Village"
+        hint          the newest hint, e.g. "north as the crow flies from
+                      Seers' Village"
+        earlierHints  other, different hints heard for the same tree, oldest
+                      first (a list of strings), or nil. The game picks one
+                      of the tree's hints each time you ask, so two different
+                      hints narrow the places down (see location.forHints).
         locationClue  the spirit tree's "which has appeared ..." sentence
         tileX, tileZ  where we saw the tree
         health        percent, or nil if unknown
@@ -89,6 +94,8 @@
     original. Only if they differ is the copy stored. That way every function
     can say whether anything really changed, so the caller only saves then.
 ]]
+
+local location = require("core/location")
 
 local worldstate = {}
 
@@ -189,7 +196,7 @@ end
 -- The fields that belong to one particular tree. When that tree is gone (or
 -- turns out to be a different tree), all of them go.
 local TREE_FIELDS = {
-    "treeType", "hint", "locationClue", "tileX", "tileZ", "health", "healthSource",
+    "treeType", "hint", "earlierHints", "locationClue", "tileX", "tileZ", "health", "healthSource",
     "spawnAt", "spawnEarliest", "spawnLatest", "spawnSource",
     "matureAt", "matureEarliest", "matureLatest", "matureSource",
     "strikeSeenAt", "stageDropAt", "stageDropCap", "deadAt",
@@ -548,6 +555,40 @@ end
 -- Dialogue: Spirit tree, Sunbeam crown, Nature's Sentinel helm
 -------------------------------------------------------------------------------
 
+-- At most this many earlier hints are kept. A place has at most three hints,
+-- so more than that means the list holds hints from an older tree anyway.
+local MAX_EARLIER_HINTS = 3
+
+-- Records a hint we were just told. The same hint again changes nothing.
+-- A different one becomes the newest, and the one it replaces moves to
+-- earlierHints. The list is always built new, never changed in place:
+-- update() compares the old and new record field by field, and a list
+-- changed in place would look the same in both (like mutating state in
+-- React).
+local function rememberHint(record, hint)
+    if record.hint == nil then
+        record.hint = hint
+        return
+    end
+    if location.sameHint(record.hint, hint) then
+        return
+    end
+    local earlier = {}
+    for _, old in ipairs(record.earlierHints or {}) do
+        if not location.sameHint(old, hint) then
+            earlier[#earlier + 1] = old
+        end
+    end
+    earlier[#earlier + 1] = record.hint
+    -- Keep only the newest MAX_EARLIER_HINTS (the end of the list).
+    -- table.remove(list, 1) drops the first item, like list.shift().
+    while #earlier > MAX_EARLIER_HINTS do
+        table.remove(earlier, 1)
+    end
+    record.earlierHints = earlier
+    record.hint = hint
+end
+
 -- facts come from parser.parseDialogue. A conversation arrives one page at a
 -- time (timer on one page, hint on the next), so each page only touches the
 -- fields it knows about and never wipes what an earlier page set.
@@ -612,7 +653,7 @@ function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
 
         -- "It can be found north as the crow flies from Seers' Village."
         if facts.hint ~= nil then
-            record.hint = facts.hint
+            rememberHint(record, facts.hint)
         end
 
         -- "...which has appeared beside the west gates of Yanille." Only said

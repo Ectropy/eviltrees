@@ -37,7 +37,7 @@ log = function() end
 local store = require("core/store")
 store.worlds[204] = {
   status = "none", spawnAt = 1793945263552, spawnEarliest = 1793945232000, spawnLatest = 1793945283000,
-  hint = "close to the village you call 'Seers'", health = 50, tileX = 2702,
+  hint = "close to the village you call 'Seers'", earlierHints = { "on the island known as Karamja" }, health = 50, tileX = 2702,
 }
 store.lastWorld = { number = 205, seenAt = 1793940389123 }
 store.saveNow(1793940389123)
@@ -57,6 +57,7 @@ check("small number type", math.type(r.health), "integer")
 check("tile", r.tileX, 2702)
 check("world", r.world, 204)
 check("hint text kept", r.hint, "close to the village you call 'Seers'")
+check("earlier hints kept", r.earlierHints and r.earlierHints[1], "on the island known as Karamja")
 check("lastWorld seenAt exact", store.lastWorld.seenAt, 1793940389123)
 check("lastWorld number", store.lastWorld.number, 205)
 

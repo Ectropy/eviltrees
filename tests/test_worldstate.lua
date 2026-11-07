@@ -618,6 +618,46 @@ ws.applyTreeLoc(WD4, 1, "seen", trees.byId[11439], 1, 1, nil, t("10:20:00"))    
 check("D4 chopped: M source unchanged", WD4[1].matureSource, "fromSpawn")
 checkTime("D4 chopped: M from the timer", WD4[1].matureLatest, "10:13:00")
 
+---------------------------------------------------------------- H: several hints for one tree
+-- Real order on the W204 oak (2026-11-07): coast, Karamja, coast, Karamja.
+local COAST_TEXT = "It can be found on the southern coast of a tropical island."
+local KARAMJA_TEXT = "Nasty spirits have got at an oak tree sapling. It can be found on the island known as Karamja."
+local WH = {}
+ws.applyDialogue(WH, 204, parser.parseDialogue("Spirit tree", "The taint of the evil tree is not currently on the land. There will be another evil tree in approximately 32 minutes."), t("16:31:05"))
+ws.applyDialogue(WH, 204, parser.parseDialogue("Spirit tree", COAST_TEXT), t("16:31:13"))
+check("H1 first hint", WH[204].hint, "on the southern coast of a tropical island")
+check("H1 no earlier hints", WH[204].earlierHints, nil)
+local before = WH[204]
+check("H2 same hint again: no change",
+  ws.applyDialogue(WH, 204, parser.parseDialogue("Spirit tree", COAST_TEXT), t("16:40:00")), false)
+check("H2 record untouched", WH[204], before)
+check("H3 different hint: change",
+  ws.applyDialogue(WH, 204, parser.parseDialogue("Queen of Sunrise", KARAMJA_TEXT), t("17:03:47")), true)
+check("H3 newest", WH[204].hint, "on the island known as Karamja")
+check("H3 earlier", WH[204].earlierHints and WH[204].earlierHints[1], "on the southern coast of a tropical island")
+check("H3 old record's list untouched", before.earlierHints, nil)
+local list = WH[204].earlierHints
+ws.applyDialogue(WH, 204, parser.parseDialogue("Spirit tree", COAST_TEXT), t("17:04:03"))
+check("H4 back to the first: newest", WH[204].hint, "on the southern coast of a tropical island")
+check("H4 the other is earlier", WH[204].earlierHints[1], "on the island known as Karamja")
+check("H4 no duplicates", #WH[204].earlierHints, 1)
+check("H4 a new list", WH[204].earlierHints ~= list, true)
+check("H4 old list unchanged", list[1], "on the southern coast of a tropical island")
+-- Capitals don't make a hint "different".
+check("H5 case ignored",
+  ws.applyDialogue(WH, 204, { hint = "On The Southern Coast Of A Tropical Island" }, t("17:05:00")), false)
+-- At most three earlier hints.
+local WH2 = { [1] = { status = "none", spawnAt = t("10:00:00") } }
+for i = 1, 6 do ws.applyDialogue(WH2, 1, { hint = "hint " .. i }, t("09:00:00") + i) end
+check("H6 newest", WH2[1].hint, "hint 6")
+check("H6 capped", #WH2[1].earlierHints, 3)
+check("H6 oldest kept", WH2[1].earlierHints[1], "hint 3")
+-- A new tree cycle (timer while a tree is recorded) forgets all hints.
+local WH3 = { [2] = { status = "alive", treeType = "oak", spawnAt = t("01:20:00"), hint = "a", earlierHints = { "b" } } }
+ws.applyDialogue(WH3, 2, { timerMs = 30 * 60000 }, t("01:40:00"))
+check("H7 hint gone", WH3[2].hint, nil)
+check("H7 earlier hints gone", WH3[2].earlierHints, nil)
+
 ---------------------------------------------------------------- U: capitals never matter
 local u1 = parser.parseDialogue("SPIRIT TREE", "THERE WILL BE ANOTHER EVIL TREE IN APPROXIMATELY 1 HOUR AND 1 MINUTE.")
 check("U1 speaker and timer in capitals", u1 and u1.timerMs, 61 * 60000)

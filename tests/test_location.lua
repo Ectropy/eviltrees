@@ -119,5 +119,42 @@ name = location.forRecord({ status = "alive", hint = "north as the crow flies fr
   locationClue = "in the north of Seers' Village", tileX = 2702, tileZ = 3640 })
 check("R5 tile beats clue", name, "East of the house portal in Rellekka")
 
+---------------------------------------------------------------- M: several hints
+-- The W204 oak (2026-11-07): two different hints for one tree, real text.
+local COAST = hintOf("Spirit tree", "It can be found on the southern coast of a tropical island.")
+local KARAMJA = hintOf("Queen of Sunrise",
+  "Nasty spirits have got at an oak tree sapling. It can be found on the island known as Karamja.")
+local KHARAZI = "Kharazi Jungle, east of the teak trees"
+local oak = { status = "sapling", hint = KARAMJA, earlierHints = { COAST } }
+check("M1 two hints share one place", location.forRecord(oak), KHARAZI)
+local places = location.forHints(oak)
+check("M1 only that place", #places, 1)
+-- Either order gives the same answer.
+check("M2 other order", location.forRecord({ status = "none", hint = COAST, earlierHints = { KARAMJA } }), KHARAZI)
+-- One hint alone: still two places.
+check("M3 one hint", #location.forHints({ status = "none", hint = COAST }), 2)
+check("M3 one hint: no name", location.forRecord({ status = "none", hint = COAST }), nil)
+-- Hints that share no place: the newest wins (the older one must be from an
+-- older tree). Seers (3 places) shares nothing with Karamja.
+local SEERS = "close to the village you call 'Seers'"
+places = location.forHints({ status = "none", hint = KARAMJA, earlierHints = { SEERS } })
+check("M4 no shared place: newest", #places, 2)
+check("M4 newest's first place", places[1], location.forHint(KARAMJA)[1])
+-- ...and anything older than the clash is ignored too.
+places = location.forHints({ status = "none", hint = KARAMJA, earlierHints = { COAST, SEERS } })
+check("M5 stops at the clash", #places, 2)
+places = location.forHints({ status = "none", hint = KARAMJA, earlierHints = { SEERS, COAST } })
+check("M5 shared before the clash", places[1], KHARAZI)
+check("M5 shared before the clash: one", #places, 1)
+-- An unknown newest hint doesn't wipe out a known older one.
+places = location.forHints({ status = "none", hint = "somewhere over the rainbow", earlierHints = { COAST } })
+check("M6 unknown newest skipped", #places, 2)
+check("M7 nothing known", #location.forHints({ status = "none" }), 0)
+-- The lookup table itself is never changed by intersecting.
+location.forHints(oak)
+check("M8 hint table untouched", #location.forHint(COAST), 2)
+check("M9 sameHint ignores case and spaces", location.sameHint("On the island  known as Karamja.", KARAMJA), true)
+check("M9 different hints", location.sameHint(COAST, KARAMJA), false)
+
 print(passes .. " passed, " .. failures .. " failed")
 if failures > 0 then error("test failures") end
