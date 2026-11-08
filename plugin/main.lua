@@ -21,7 +21,7 @@
       capture/examine.lua       - examine text
       capture/trees.lua         - evil tree objects near the player
       capture/lightning.lua     - lightning strikes (the "Thor" NPC)
-      capture/chat.lua          - sapling inspect text (optional chatAccess)
+      capture/chat.lua          - sapling inspect text, activity alert (optional chatAccess)
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
       ui/grid.lua               - every world in a floating window (PrettyUI)
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
@@ -435,9 +435,18 @@ examine.setOnText(function(text)
 end)
 
 -- A game message in the chatbox (only with the optional chatAccess
--- permission). We only act on inspecting a sapling; every other message is
--- ignored and never logged.
+-- permission). We only act on the activity tracker's alert and on
+-- inspecting a sapling; every other message is ignored and never logged.
 chat.setOnText(function(text)
+    -- "Activity: Evil Tree will be available again in 5 minutes." The
+    -- tracker follows the world you're on, so it's this world's next spawn.
+    local alert = parser.parseActivityAlert(text)
+    if alert ~= nil then
+        addCapture("activity alert: spawn in " .. formatMinutes(alert.timerMs), text)
+        noteChange(worldstate.applyDialogue(store.worlds, currentWorld.number, alert, clock.now(), clock.isSynced()))
+        return
+    end
+
     local facts = parser.parseInspect(text)
     if facts == nil then
         return
@@ -551,7 +560,7 @@ Event.LocAnimation.Subscribe("evilTrees", safe.handler("LocAnimation", trees.onL
 -- NPCs appearing: the lightning strike ("Thor").
 Event.NPCEntityAdded.Subscribe("evilTrees", safe.handler("NPCEntityAdded", lightning.onNpcAdded))
 
--- Chatbox game messages: sapling inspect. Only fires with chatAccess.
+-- Chatbox game messages: activity alert, sapling inspect. Only fires with chatAccess.
 Event.ChatMessage.Subscribe("evilTrees", safe.handler("ChatMessage", chat.onChatMessage))
 
 -- Logging in, hopping worlds, logging out.

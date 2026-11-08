@@ -6,9 +6,12 @@
     This needs the OPTIONAL "chatAccess" permission (plugin.json). The player
     can leave it off: then the client never sends Event.ChatMessage, this
     file does nothing, and everything else still works. We only use it for
-    something no permission-free source gives us: inspecting a sapling,
-    "This sapling will grow into an evil willow tree." (the tree's type
-    while it's still a sapling).
+    things no permission-free source gives us:
+      - inspecting a sapling, "This sapling will grow into an evil willow
+        tree." (the tree's type while it's still a sapling)
+      - the activity tracker's alert, "Activity: Evil Tree will be available
+        again in 5 minutes." (a spawn timer for this world, without having
+        to visit a spirit tree)
 
     Every game message passes through here, but main.lua only keeps the ones
     the parser recognises. Nothing else is logged or saved, and messages

@@ -195,11 +195,21 @@ game.locs[11394] = nil
 server(1)
 check("M8 unloaded leaves the record alone", store.worlds[204], recordBefore)
 
+-- the activity tracker's chat alert (optional chatAccess): a spawn timer
+-- for the world we're on. A player typing it is ignored.
+local ALERT = "<col=ef1020>Activity: Evil Tree will be available again in 5 minutes.</col>"
+handlers.ChatMessage({ senderNameUnfiltered = "Someone", chatMessage = ALERT })
+check("M9 player chat ignored", store.worlds[204].status, "alive")
+handlers.ChatMessage({ senderNameUnfiltered = "", chatMessage = ALERT })
+check("M9 alert: tree gone", store.worlds[204].status, "none")
+check("M9 alert: spawn source", store.worlds[204].spawnSource, "timer")
+
 PluginShutdown()
 check("M4 saved worlds", type(saved.worlds), "table")
 check("M8 log shows unloaded", saved.captureLog ~= nil and string.find(saved.captureLog, "tree unloaded: sapling 4/5 at 2702,3640", 1, true) ~= nil, true)
 check("M4 log has merges", saved.captureLog ~= nil and string.find(saved.captureLog, "-> record now", 1, true) ~= nil, true)
 check("M4 log shows replacement", saved.captureLog ~= nil and string.find(saved.captureLog, "(replaced sapling3)", 1, true) ~= nil, true)
+check("M9 log shows the alert", saved.captureLog ~= nil and string.find(saved.captureLog, "activity alert: spawn in 5m", 1, true) ~= nil, true)
 check("M5 no errors", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
 

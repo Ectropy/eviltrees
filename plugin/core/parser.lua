@@ -3,9 +3,10 @@
     ---------------
     Turns game text into facts. Pure: no game API calls, just string work.
 
-    Two kinds of text:
+    Three kinds of text:
       - Dialogue from the Spirit tree or the Queen of Sunrise (Sunbeam crown).
       - Examine text (shown in the info box when you examine something).
+      - Chat messages (optional chatAccess): sapling inspect, activity alert.
 
     Lua patterns are a simpler cousin of regex:
         %d   a digit          (regex \d)
@@ -226,6 +227,31 @@ function parser.parseInspect(text)
         source = "sapling inspect",
         treeType = TREE_WORDS[treeWord],
         isSapling = true,
+    }
+end
+
+-- Reads the activity tracker's chat alert (only seen with the optional
+-- chatAccess permission, see capture/chat.lua):
+--   "Activity: Evil Tree will be available again in 5 minutes."
+-- It is NOT exact: tested on W204 (2026-11-08), the alert came at 03:21:57
+-- and the sapling at 03:27:15-03:27:18, 5:18-5:21 later. So "5 minutes" is
+-- rounded down like the spirit tree's "approximately 5 minutes" (5 to 6 min).
+-- Returns facts shaped like a dialogue timer, so worldstate.applyDialogue
+-- handles it exactly like one:
+--   { source = "activity alert", timerMs = 300000 }
+-- or nil if it isn't that message. "minutes?" also accepts "1 minute".
+function parser.parseActivityAlert(text)
+    if text == nil then
+        return nil
+    end
+    local lower = string.lower(text)
+    local minutes = string.match(lower, "evil tree will be available again in (%d+) minutes?")
+    if minutes == nil then
+        return nil
+    end
+    return {
+        source = "activity alert",
+        timerMs = tonumber(minutes) * MS_PER_MINUTE,
     }
 end
 

@@ -606,6 +606,34 @@ local WI = { [1] = { status = "sapling", treeType = "elder", spawnAt = t("10:00:
 ws.applyDialogue(WI, 1, i2, t("10:02:00"))
 checkTime("I6 same type keeps spawn", WI[1].spawnAt, "10:00:00")
 
+---------------------------------------------------------------- A: activity tracker chat alert
+-- "Activity: Evil Tree will be available again in 5 minutes." is rounded
+-- down like the spirit tree's timer: 5 to 6 minutes (W204, 2026-11-08).
+local ALERT_TEXT = "Activity: Evil Tree will be available again in 5 minutes."
+local a1 = parser.parseActivityAlert(ALERT_TEXT)
+check("A1 timer", a1 and a1.timerMs, 5 * 60000)
+check("A1 source", a1 and a1.source, "activity alert")
+check("A2 one minute", (parser.parseActivityAlert("Activity: Evil Tree will be available again in 1 minute.") or {}).timerMs, 60000)
+check("A3 capitals", (parser.parseActivityAlert("ACTIVITY: EVIL TREE WILL BE AVAILABLE AGAIN IN 5 MINUTES.") or {}).timerMs, 5 * 60000)
+check("A4 other activity", parser.parseActivityAlert("Activity: Shooting Star will be available again in 5 minutes."), nil)
+check("A4b spirit tree text", parser.parseActivityAlert("There will be another evil tree in approximately 5 minutes."), nil)
+check("A4c nil", parser.parseActivityAlert(nil), nil)
+-- The real W204 test (2026-11-08): spirit tree "51 minutes" at 02:35:11,
+-- read just after a hop with the clock minute-only (03:26:11..03:28:11),
+-- then the alert at 03:21:57 (03:26:57..03:27:57) narrows it to
+-- 03:26:57..03:27:57. The sapling came at 03:27:15-18: inside.
+local WA = {}
+ws.applyDialogue(WA, 204, parser.parseDialogue("Spirit tree", "The taint of the evil tree is not currently on the land. There will be another evil tree in approximately 51 minutes."), t("02:35:11"), false)
+check("A6 alert changes the record", ws.applyDialogue(WA, 204, a1, t("03:21:57")), true)
+checkTime("A6 earliest", WA[204].spawnEarliest, "03:26:57")
+checkTime("A6 latest", WA[204].spawnLatest, "03:27:57")
+check("A6 source", WA[204].spawnSource, "timer")
+-- Like any spawn timer, it means the old tree (here a dead trunk) is gone.
+local WA3 = { [1] = { status = "dead", treeType = "oak", deadAt = t("09:00:00") } }
+ws.applyDialogue(WA3, 1, a1, t("10:00:00"))
+check("A8 old tree forgotten", WA3[1].status, "none")
+check("A8 type forgotten", WA3[1].treeType, nil)
+
 ---------------------------------------------------------------- D: low health assumes the strikes happened (W205 oak, 2026-11-07)
 -- Only told "alive", then found at <=25%: strike 2 assumed done, so it dies
 -- within 10 min (the real tree died 14 s later). Was "dies within 29 min".

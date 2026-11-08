@@ -14,7 +14,8 @@
                       the window S must lie in, given everything seen so far
                       (spawnAt is always inside it)
         spawnSource   what last narrowed that window: "timer" (spirit tree /
-                      crown / helm countdown) | "sapling" (a sapling seen,
+                      crown / helm countdown, or the activity tracker's
+                      chat alert) | "sapling" (a sapling seen,
                       or said to exist) | "step" (watched a sapling stage
                       change)
         matureAt      when the sapling became a full tree ("M"). Best estimate.
