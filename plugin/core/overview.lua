@@ -15,7 +15,7 @@
     and each row looks like:
         {
             world = 204,
-            heading = "w204 - Evil willow - <=50%",
+            heading = "w204 - Evil willow - max 50%",
             place = "East of the house portal in Rellekka",   -- or nil
             noIntel = true,          -- only on the current world's row, when
                                      -- we know nothing about it yet
@@ -72,7 +72,7 @@ local function describeTree(record)
     return "No tree"
 end
 
--- Health as shown: "45%" (examined, exact), or "<=50%" (at most: from the
+-- Health as shown: "45%" (examined, exact), or "max 50%" (at most: from the
 -- tree's look, a strike we saw, or a strike that has certainly happened by
 -- now). nil if unknown.
 local function describeHealth(record)
@@ -84,7 +84,9 @@ local function describeHealth(record)
     if record.healthSource == "examine" then
         return percent
     end
-    return "<=" .. percent
+    -- Not "<=50%": game text reads "<...>" as a markup tag (like <br>),
+    -- so a "<" hides the rest of the line.
+    return "max " .. percent
 end
 
 -- Where the tree is (or will be): the exact place if we know it, else the
@@ -217,7 +219,7 @@ end
 --   current   true for the world you're on
 --   kind      see cellKind
 --   treeType  "Willow" (or nil)
---   health    "95%" or "<=50%" (alive trees only, or nil)
+--   health    "95%" or "max 50%" (alive trees only, or nil)
 local function buildCell(number, members, record, currentNumber, now)
     local cell = buildRow(number, record, now)
     cell.members = members

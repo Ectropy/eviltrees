@@ -419,7 +419,7 @@ trees.setOnEvent(function(kind, info, tileX, tileZ, previous)
         what = info.treeType .. " " .. what
     end
     if info.healthCap ~= nil then
-        what = what .. " (<=" .. info.healthCap .. "%)"
+        what = what .. " (max " .. info.healthCap .. "%)"     -- no "<": the game reads it as a tag
     end
     if info.saplingLevel ~= nil then
         what = what .. " " .. info.saplingLevel .. "/5"

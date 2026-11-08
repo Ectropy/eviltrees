@@ -103,11 +103,11 @@ local alive = { status = "alive", matureAt = NOW }
 alive.treeType = "tree"
 check("H1 plain tree", heading(alive), "w1 - Evil tree")
 alive.health, alive.healthSource = 50, "stage"
-check("H2 stage cap", heading(alive), "w1 - Evil tree - <=50%")
+check("H2 stage cap", heading(alive), "w1 - Evil tree - max 50%")
 alive.healthSource = "strike"
-check("H3 strike", heading(alive), "w1 - Evil tree - <=50%")
+check("H3 strike", heading(alive), "w1 - Evil tree - max 50%")
 alive.health, alive.healthSource = 25.0, "timed"
-check("H4 timed (float): at most", heading(alive), "w1 - Evil tree - <=25%")
+check("H4 timed (float): at most", heading(alive), "w1 - Evil tree - max 25%")
 check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "w1 - Magic sapling")
 check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "w1 - Evil tree")
 
