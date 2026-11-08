@@ -47,24 +47,30 @@ local DEFAULT_WIDTH = 808       -- 9 columns
 local DEFAULT_HEIGHT = 380
 local MIN_WIDTH, MIN_HEIGHT = 200, 120
 
--- Text colour of a cell's countdown, by overview's cell.kind.
+-- Where a colour is "PrettyUI's", it is copied from PrettyUI v1.3.0's own
+-- widgets (it has no public palette), so the grid matches its look: warm
+-- browns and golds rather than cool greys.
+
+-- Text colour of a cell's countdown, by overview's cell.kind. Softer than
+-- pure hues so they sit well on the brown cells.
+local MUTED = 0x8B8882FF                -- PrettyUI's disabled text
 local KIND_COLOURS = {
-    unknown = 0x6B7280FF,       -- grey: no intel
-    none = 0x6B7280FF,          -- intel (a hint) but nothing due
-    spawn = 0x93C5FDFF,         -- light blue: spawn timer
-    sapling = 0xFDE047FF,       -- yellow
-    alive = 0x4ADE80FF,         -- green
-    dead = 0xEF4444FF,          -- red: rewards left
+    unknown = MUTED,            -- no intel
+    none = MUTED,               -- intel (a hint) but nothing due
+    spawn = 0x8FB8DEFF,         -- soft blue: spawn timer
+    sapling = 0xF0DC5AFF,       -- yellow
+    alive = 0x7CC04AFF,         -- green (PrettyUI's buff green, brightened for text)
+    dead = 0xD9786FFF,          -- red: rewards left (PrettyUI's chart red, brightened)
 }
-local NAME_COLOUR = 0xE7D7B0FF          -- PrettyUI's body text
-local MUTED = 0x6B7280FF                -- names of worlds with no intel
+local NAME_COLOUR = 0xE7D7B0FF          -- PrettyUI's body text: every world number
 local HEADER_COLOUR = 0xF2C66DFF        -- PrettyUI's title gold
 local PLACE_COLOUR = 0xAFA27FFF
-local CELL_BG = 0x1F2937E6
-local CELL_BG_HOVER = 0x374151F0
+local CELL_BG = 0x171512E8              -- PrettyUI's list background
+local CELL_BG_HOVER = 0x393530F2        -- PrettyUI's hover
+local CELL_BG_SELECTED = 0x4A4640FF     -- PrettyUI's selected
 local BORDER_P2P = 0x8A6A2AFF
 local BORDER_F2P = 0x2A6A8AFF
-local BORDER_OTHER = 0x4B5563FF         -- not in our world list (beta worlds)
+local BORDER_OTHER = 0x716B61FF         -- PrettyUI's frame; not in our world list (beta worlds)
 local BORDER_CURRENT = 0xFFFFFFFF       -- the world you're on
 local BORDER_SELECTED = 0xF2C66DFF      -- the world you clicked
 
@@ -145,6 +151,21 @@ local function borderColour(cell)
     return BORDER_OTHER
 end
 
+-- Sets a cell's background: selected beats hovered beats plain. Only
+-- touches the game component when the colour actually changes.
+local function refreshBackground(view)
+    local colour = CELL_BG
+    if view.world == selectedWorld then
+        colour = CELL_BG_SELECTED
+    elseif view.hovered then
+        colour = CELL_BG_HOVER
+    end
+    if colour ~= view.backgroundColour then
+        view.background.rgba = colour
+        view.backgroundColour = colour
+    end
+end
+
 -------------------------------------------------------------------------------
 -- Building
 -------------------------------------------------------------------------------
@@ -207,6 +228,7 @@ local function buildView(cell)
     view.border = newRectangle(view.root, false, BORDER_OTHER)
     view.name = newText(view.root, 3, 1, textWidth, CELL_HEIGHT - 2)
     view.name.content = "w" .. cell.world
+    view.name.rgba = NAME_COLOUR
     view.timer = newText(view.root, 3, 1, textWidth, CELL_HEIGHT - 2, ui.AlignMode.BOTTOMRIGHT)
 
     -- Tooltip. Giving our own hover handlers lets us also highlight the
@@ -214,14 +236,16 @@ local function buildView(cell)
     view.tooltip = prettyui.Tooltip.attach(view.root, window.content, { text = "", maxWidth = 300 }, {
         onMouseOver = function(tip)
             pcall(function()
-                view.background.rgba = CELL_BG_HOVER
+                view.hovered = true
+                refreshBackground(view)
                 tip:SetText(tooltipText(view.cell, lastNow))
                 tip:Show()
             end)
         end,
         onMouseLeave = function(tip)
             pcall(function()
-                view.background.rgba = CELL_BG
+                view.hovered = false
+                refreshBackground(view)
                 tip:Hide()
             end)
         end,
@@ -318,13 +342,13 @@ local function updateView(view, cell, now)
     if cell.kind ~= view.kind then
         view.kind = cell.kind
         view.timer.rgba = KIND_COLOURS[cell.kind] or MUTED
-        view.name.rgba = (cell.kind == "unknown") and MUTED or NAME_COLOUR
     end
     local border = borderColour(cell)
     if border ~= view.borderColour then
         view.border.rgba = border
         view.borderColour = border
     end
+    refreshBackground(view)
 end
 
 -- The header: the clicked world, else the one you're on, else a hint.

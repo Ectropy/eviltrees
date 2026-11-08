@@ -85,6 +85,11 @@ local function borderOf(layer)
     if c.kind == "Rectangle" and c.parent == layer and c.fill == false then return c end
   end
 end
+local function backgroundOf(layer)
+  for _, c in ipairs(components) do
+    if c.kind == "Rectangle" and c.parent == layer and c.fill == true then return c end
+  end
+end
 local function cellFor(world)
   for _, layer in ipairs(cellsOnScreen()) do
     local name = textsOf(layer)
@@ -136,10 +141,10 @@ check("B5 title counts scouted", window.title, "Evil Trees - 2 / 137 scouted")
 local name, timer = textsOf(cellFor(2))
 check("C1 w prefix", name.content, "w2")
 check("C2 countdown in minutes", timer.content, "45m")
-check("C3 spawn colour", timer.rgba, 0x93C5FDFF)
+check("C3 spawn colour", timer.rgba, 0x8FB8DEFF)
 name, timer = textsOf(cellFor(1))
 check("C4 no intel: blank countdown", timer.content, "")
-check("C5 no intel: grey name", name.rgba, 0x6B7280FF)
+check("C5 no intel: name still in body text", name.rgba, 0xE7D7B0FF)
 check("C6 current world outlined white", borderOf(cellFor(204)).rgba, 0xFFFFFFFF)
 check("C7 F2P outline", borderOf(cellFor(3)).rgba, 0x2A6A8AFF)
 
@@ -171,16 +176,21 @@ check("F2 countdown ticks down", select(2, textsOf(cellFor(2))).content, "43m")
 ---------------------------------------------------------------- clicking
 cellFor(2).hooks.click()
 check("G1 clicked: gold outline", borderOf(cellFor(2)).rgba, 0xF2C66DFF)
+check("G1b clicked: selected background", backgroundOf(cellFor(2)).rgba, 0x4A4640FF)
 top = headerLines()
 check("G2 header shows the clicked world", top, "w2 - No tree  -  Spawns in 43:59")
 cellFor(2).hooks.click()
 check("G3 click again: unselected", borderOf(cellFor(2)).rgba, 0x8A6A2AFF)
+check("G4 unselected: plain background", backgroundOf(cellFor(2)).rgba, 0x171512E8)
 
 -- Hover text.
 cellFor(204).tip.handlers.onMouseOver(cellFor(204).tip)
 check("H1 tooltip", cellFor(204).tip.text,
   "w204 - Evil willow - 45% (you're here) | Lightning in 13:59 | East of the house portal in Rellekka")
 check("H2 wheel handed to the window", cellFor(204).hooks.wheel, window._onScrollWheel)
+check("H3 hover background", backgroundOf(cellFor(204)).rgba, 0x393530F2)
+cellFor(204).tip.handlers.onMouseLeave(cellFor(204).tip)
+check("H4 leave: plain background", backgroundOf(cellFor(204)).rgba, 0x171512E8)
 
 ---------------------------------------------------------------- closing
 grid.toggle()
