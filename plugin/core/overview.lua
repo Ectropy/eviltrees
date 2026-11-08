@@ -15,7 +15,7 @@
     and each row looks like:
         {
             world = 204,
-            heading = "W204 - Evil willow - <=50%",
+            heading = "w204 - Evil willow - <=50%",
             place = "East of the house portal in Rellekka",   -- or nil
             noIntel = true,          -- only on the current world's row, when
                                      -- we know nothing about it yet
@@ -103,12 +103,12 @@ end
 local function buildRow(number, record, now)
     local row = { world = number }
     if record == nil then
-        row.heading = "W" .. number
+        row.heading = "w" .. number          -- "w204", like EctoTrees
         row.noIntel = true
         return row
     end
 
-    local parts = { "W" .. number, describeTree(record) }
+    local parts = { "w" .. number, describeTree(record) }
     local health = describeHealth(record)
     if health ~= nil and record.status == "alive" then
         parts[#parts + 1] = health

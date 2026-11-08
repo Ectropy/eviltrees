@@ -50,7 +50,7 @@ check("B3 others count", #view.others, 4)
 
 local current = view.current
 check("B4 current world", current.world, 204)
-check("B4 heading", current.heading, "W204 - Evil willow - 45%")
+check("B4 heading", current.heading, "w204 - Evil willow - 45%")
 check("B4 place from tile", current.place, "East of the house portal in Rellekka")
 check("B4 next event", current.eventLabel, "Lightning in")
 check("B4 not approximate", current.approximate, false)
@@ -62,15 +62,15 @@ check("B5 order 3", view.others[3].world, 117)
 check("B5 order 4", view.others[4].world, 3)
 
 local sapling, dead, spawning, hintOnly = view.others[1], view.others[2], view.others[3], view.others[4]
-check("B6 sapling heading", sapling.heading, "W86 - Sapling")
+check("B6 sapling heading", sapling.heading, "w86 - Sapling")
 check("B6 sapling place", sapling.place, "South of Draynor Village, near the willow trees")
 check("B6 sapling countdown", overview.countdownText(sapling, NOW), "Full tree in 2:00")
 
-check("B7 dead heading", dead.heading, "W12 - Dead oak")
+check("B7 dead heading", dead.heading, "w12 - Dead oak")
 check("B7 dead place: hint", dead.place, "Hint: Close to a large collection of willow trees")
 check("B7 dead countdown", overview.countdownText(dead, NOW), "Rewards gone in 5:06")
 
-check("B8 spawn heading", spawning.heading, "W117 - No tree")
+check("B8 spawn heading", spawning.heading, "w117 - No tree")
 check("B8 spawn place: two options", spawning.place,
   "East of the house portal in Rellekka or Northwest of Seers' Village bank")
 check("B8 spawn countdown", overview.countdownText(spawning, NOW), "Spawns in 30:00")
@@ -84,7 +84,7 @@ check("B9 two-place hint", hintOnly.place,
 -- No record yet: a row that says so.
 view = overview.build(worlds, 205, NOW, 137)
 check("C1 no intel", view.current.noIntel, true)
-check("C1 heading", view.current.heading, "W205")
+check("C1 heading", view.current.heading, "w205")
 check("C1 all others listed", #view.others, 5)
 
 -- World not known yet (start-up / mid-hop).
@@ -101,15 +101,15 @@ local function heading(record)
 end
 local alive = { status = "alive", matureAt = NOW }
 alive.treeType = "tree"
-check("H1 plain tree", heading(alive), "W1 - Evil tree")
+check("H1 plain tree", heading(alive), "w1 - Evil tree")
 alive.health, alive.healthSource = 50, "stage"
-check("H2 stage cap", heading(alive), "W1 - Evil tree - <=50%")
+check("H2 stage cap", heading(alive), "w1 - Evil tree - <=50%")
 alive.healthSource = "strike"
-check("H3 strike", heading(alive), "W1 - Evil tree - <=50%")
+check("H3 strike", heading(alive), "w1 - Evil tree - <=50%")
 alive.health, alive.healthSource = 25.0, "timed"
-check("H4 timed (float): at most", heading(alive), "W1 - Evil tree - <=25%")
-check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "W1 - Magic sapling")
-check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "W1 - Evil tree")
+check("H4 timed (float): at most", heading(alive), "w1 - Evil tree - <=25%")
+check("H5 magic sapling", heading({ status = "sapling", treeType = "magic", spawnAt = NOW }), "w1 - Magic sapling")
+check("H6 unknown type alive", heading({ status = "alive", matureAt = NOW }), "w1 - Evil tree")
 
 -- M known to the second: exact (events are exactly M + 10/20/30). M only known within a few minutes: approximate, "~".
 local M = NOW - MINUTE
@@ -122,7 +122,7 @@ check("H7b rough M is approximate", overview.countdownText(row, NOW), "Lightning
 -- time, no health, just the latest it can die. (Beta bug 2026-11-06.)
 local guessed = { status = "alive", matureAt = NOW - 15 * MINUTE, matureEarliest = NOW - 31 * MINUTE, matureLatest = NOW }
 row = overview.build({ [1] = guessed }, 1, NOW, 137).current
-check("H8 rough M: heading", row.heading, "W1 - Evil tree")
+check("H8 rough M: heading", row.heading, "w1 - Evil tree")
 check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30:00")
 
 print(string.format("%d passed, %d failed", passes, failures))

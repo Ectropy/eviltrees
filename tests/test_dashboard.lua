@@ -67,7 +67,7 @@ check("O1 one view", #views, 1)
 check("O1 sized to the page", views[1].options.width, 384)
 check("O2 title", shows("Evil Trees"), true)
 check("O3 scouted", shows("Scouted 0 / "), true)
-check("O4 current world, no intel", shows("W204 (you're here)"), true)
+check("O4 current world, no intel", shows("w204 (you're here)"), true)
 check("O5 no other worlds", shows("None yet."), true)
 check("O6 debug section", shows("Debug"), true)
 check("O7 no clear button without intel", button("Clear world"), nil)
@@ -80,7 +80,7 @@ interfaces["1184:4"] = nil; interfaces["1184:10"] = nil
 logic(50)                    -- passes logicTick 50: refresh
 check("T1 rebuilt", #views, 2)
 check("T1 old view destroyed", views[1].destroyed, true)
-check("T2 heading", shows("W204 - No tree"), true)
+check("T2 heading", shows("w204 - No tree"), true)
 -- the fake clock never learns the seconds here, so the time gets a "~"
 check("T3 countdown", string.match(screen(), "Spawns in ~%d:%d%d") ~= nil, true)
 check("T4 clear button", button("Clear world") ~= nil, true)
@@ -95,7 +95,7 @@ check("T5 countdown ticked", screen() ~= before, true)
 store.worlds[117] = { status = "none", spawnAt = 1793945263552, hint = "north as the crow flies from Seers' Village" }
 logic(50)
 check("W1 rebuilt for the new world", #views, 3)
-check("W2 other world heading", shows("W117 - No tree"), true)
+check("W2 other world heading", shows("w117 - No tree"), true)
 check("W3 two-place hint", shows("East of the house portal in Rellekka or Northwest of Seers' Village bank"), true)
 check("W4 scouted", shows("Scouted 2 / "), true)
 
@@ -106,14 +106,14 @@ check("C1 still there until confirmed", store.worlds[204] ~= nil, true)
 confirms[1].onConfirm()
 check("C2 cleared", store.worlds[204], nil)
 check("C3 other world kept", store.worlds[117] ~= nil, true)
-check("C4 redrawn without intel", shows("W204 (you're here)"), true)
+check("C4 redrawn without intel", shows("w204 (you're here)"), true)
 
 ---------------------------------------------------------------- page closed and reopened
 local count = #views
 handlers.ContentLayerReady({ component = { width = 300, height = 500 } })
 check("R1 new view on reopen", #views, count + 1)
 check("R1 old one destroyed", views[count].destroyed, true)
-check("R2 content back at once", shows("W117 - No tree"), true)
+check("R2 content back at once", shows("w117 - No tree"), true)
 
 check("Z1 no errors so far", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
