@@ -15,6 +15,7 @@
       core/worldstate.lua       - facts + time -> one saved record per world
       core/location.lua         - tile / clue / hint -> where the tree is
       core/overview.lua         - records -> what the dashboard shows
+      core/sampledata.lua       - made-up records for trying the grid (debug)
       capture/currentworld.lua  - which world we're on (friends list header)
       capture/dialogue.lua      - Spirit tree / Queen of Sunrise dialogue
       capture/examine.lua       - examine text
@@ -67,6 +68,7 @@ local trees = require("capture/trees")
 local lightning = require("capture/lightning")
 local chat = require("capture/chat")
 local overview = require("core/overview")
+local sampledata = require("core/sampledata")
 local dashboard = require("ui/dashboard")
 local grid = require("ui/grid")
 local debugPanel = require("ui/debugpanel")
@@ -249,6 +251,27 @@ local function debugLines(model)
     return lines
 end
 
+-- Made-up records for the grid (debug "Sample data" button), or nil to show
+-- the real ones. Never saved: a reload or world hop turns it off.
+local sampleWorlds = nil
+
+-- What the grid shows: the real records, or the sample ones. Real records
+-- still win for any world we really have data on (e.g. the beta worlds),
+-- so captures can be checked while the sample is on.
+local function gridWorlds()
+    if sampleWorlds == nil then
+        return store.worlds
+    end
+    local merged = {}
+    for number, record in pairs(sampleWorlds) do
+        merged[number] = record
+    end
+    for number, record in pairs(store.worlds) do
+        merged[number] = record
+    end
+    return merged
+end
+
 -- True when the dashboard is in use: PrettyUI is there, and it hasn't
 -- failed to draw (then the plain panel takes over, see ContentLayerReady).
 local function usingDashboard()
@@ -260,7 +283,7 @@ end
 local function refreshPanel()
     local now = clock.now()
     if grid.wantsOpen() then
-        grid.update(overview.cells(store.worlds, worlds.list, currentWorld.number, now), now, worlds.count)
+        grid.update(overview.cells(gridWorlds(), worlds.list, currentWorld.number, now), now, worlds.count)
     end
     if usingDashboard() and not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
@@ -304,6 +327,25 @@ end)
 -- The dashboard's "All worlds" button.
 dashboard.setOnToggleGrid(function()
     grid.toggle()
+    refreshPanel()
+end)
+
+-- The debug section's "Sample data" button: switches the grid between
+-- made-up and real data, and opens the grid if it's closed.
+dashboard.setOnToggleSample(function()
+    if sampleWorlds ~= nil then
+        sampleWorlds = nil
+    else
+        local now = clock.now()
+        if now == nil then
+            return          -- the clock isn't running yet; try again in a moment
+        end
+        sampleWorlds = sampledata.generate(worlds.list, now)
+        if not grid.wantsOpen() then
+            grid.toggle()
+        end
+    end
+    grid.setSampleMode(sampleWorlds ~= nil)
     refreshPanel()
 end)
 
@@ -473,6 +515,9 @@ Event.Logic.Subscribe("evilTrees", safe.handler("Logic", function(event)
         local inViewWorld = trees.isTreeInView() and currentWorld.number or nil
         if worldstate.tick(store.worlds, clock.now(), inViewWorld) then
             store.markChanged()
+        end
+        if sampleWorlds ~= nil then
+            worldstate.tick(sampleWorlds, clock.now(), nil)     -- moves the sample along too (never saved)
         end
         refreshPanel()
     end

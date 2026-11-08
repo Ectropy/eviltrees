@@ -49,6 +49,7 @@ local countdowns = {}       -- { { text = <ui.Text>, world = 204 }, ... }
 local debugClock = nil      -- the debug section's first line, updated in place
 local onClear = nil         -- function(worldNumber), set by main.lua
 local onToggleGrid = nil    -- function(), set by main.lua
+local onToggleSample = nil  -- function(), set by main.lua (debug only)
 local freshParent = false   -- true from opening the page until the first build works
 
 -- Removes the view (if any). Destroy can fail if the page was already
@@ -68,6 +69,12 @@ end
 -- main.lua gives the function that opens or closes the world grid.
 function dashboard.setOnToggleGrid(fn)
     onToggleGrid = fn
+end
+
+-- main.lua gives the function that switches the grid's sample data on or
+-- off (a button in the debug section).
+function dashboard.setOnToggleSample(fn)
+    onToggleSample = fn
 end
 
 -- Asks "are you sure?" before clearing, since it can't be undone.
@@ -173,6 +180,11 @@ local function build(model, now, debugLines)
     if debugLines ~= nil then
         view:AddDivider({ marginTop = 4, marginBottom = 4 })
         view:AddTitle("Debug")
+        view:AddSimpleButton("Sample data", function()
+            if onToggleSample ~= nil then
+                onToggleSample()
+            end
+        end, { tooltip = "Fill the world grid with random made-up data (not saved). Click again for the real data." })
         for index, line in ipairs(debugLines) do
             local text = view:AddText({ text = line, colour = MUTED, maxLines = (index == 1) and 1 or 0 })
             if index == 1 then

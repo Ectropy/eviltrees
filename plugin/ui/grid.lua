@@ -88,6 +88,7 @@ local laidOutWidth = nil    -- content width at the last layout
 local selectedWorld = nil   -- the clicked world, or nil
 local lastCells, lastNow, lastTotal = nil, nil, nil   -- the latest update's data
 local titleText = nil
+local sampleMode = false    -- showing made-up data (core/sampledata.lua): say so in the title
 local onLayoutChange = nil  -- function(state), set by main.lua
 local placement = { x = DEFAULT_X, y = DEFAULT_Y, width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT }
 local reported = nil        -- the last state passed to onLayoutChange, as text
@@ -365,6 +366,9 @@ local function updateHeader(cells, now, total)
     end
 
     local title = "Evil Trees - " .. scouted .. " / " .. total .. " scouted"
+    if sampleMode then
+        title = title .. " (sample)"     -- short: the title bar cuts off long titles
+    end
     if title ~= titleText then
         window:SetTitle(title)
         titleText = title
@@ -499,6 +503,12 @@ function grid.toggle()
     end
     wantOpen = true
     reportLayout()
+end
+
+-- True while main.lua passes made-up data (the debug "Sample data" button),
+-- so the title can say so.
+function grid.setSampleMode(on)
+    sampleMode = on
 end
 
 -- Called about once a second by main.lua. cells from overview.cells.

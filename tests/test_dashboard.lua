@@ -117,6 +117,38 @@ check("R1 new view on reopen", #views, count + 1)
 check("R1 old one destroyed", views[count].destroyed, true)
 check("R2 content back at once", shows("w117 - No tree"), true)
 
+---------------------------------------------------------------- Sample data (debug)
+-- Fills only the grid with made-up records; the saved ones are untouched.
+local storedBefore = 0
+for _ in pairs(store.worlds) do storedBefore = storedBefore + 1 end
+check("D1 sample data button", button("Sample data") ~= nil, true)
+-- No fake Window here (test_grid.lua covers the grid), so catch what the
+-- grid would be given instead. package.loaded["ui/grid"] is the same table
+-- main.lua got from require, so replacing a function on it reaches main.lua.
+local grid = package.loaded["ui/grid"]
+local realUpdate = grid.update
+local gridCells = nil
+grid.update = function(cells) gridCells = cells end
+button("Sample data").extra()        -- on
+logic(50)
+local sampled = 0
+for _, cell in ipairs(gridCells or {}) do
+  if cell.kind ~= "unknown" then sampled = sampled + 1 end
+end
+check("D2 grid gets sample data", sampled > 10, true)
+check("D3 grid opened", grid.wantsOpen(), true)
+local storedAfter = 0
+for _ in pairs(store.worlds) do storedAfter = storedAfter + 1 end
+check("D4 saved records untouched", storedAfter, storedBefore)
+button("Sample data").extra()        -- off again
+sampled = 0
+for _, cell in ipairs(gridCells or {}) do
+  if cell.kind ~= "unknown" then sampled = sampled + 1 end
+end
+check("D5 off: back to the real data", sampled, storedBefore)
+grid.restore({ open = 0 })           -- closed again (toggle would open it: no window was made)
+grid.update = realUpdate
+
 check("Z1 no errors so far", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
 
