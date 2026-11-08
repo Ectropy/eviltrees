@@ -22,6 +22,7 @@
       capture/trees.lua         - evil tree objects near the player
       capture/lightning.lua     - lightning strikes (the "Thor" NPC)
       capture/chat.lua          - sapling inspect text, activity alert (optional chatAccess)
+      capture/tracker.lua       - the activity tracker's timer, sent at login
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
       ui/grid.lua               - every world in a floating window (PrettyUI)
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
@@ -67,6 +68,7 @@ local examine = require("capture/examine")
 local trees = require("capture/trees")
 local lightning = require("capture/lightning")
 local chat = require("capture/chat")
+local tracker = require("capture/tracker")
 local overview = require("core/overview")
 local sampledata = require("core/sampledata")
 local dashboard = require("ui/dashboard")
@@ -90,6 +92,10 @@ store.load()
 
 -- Keep what the previous session saved, so the panel can show it (proves saving works).
 local previousWorld = store.lastWorld
+-- When the previous session saw us leave the game (hop or log out), or nil.
+-- The activity tracker's login reading needs it after a restart.
+-- ("a and a.b" is a?.b in JS.)
+local previousLeftAt = previousWorld and previousWorld.leftAt
 
 -------------------------------------------------------------------------------
 -- Debug panel content
@@ -388,6 +394,66 @@ currentWorld.setOnChange(function(newNumber, oldNumber)
     refreshPanel()
 end)
 
+-- Logs and applies one activity tracker reading (see capture/tracker.lua).
+-- loginEarliest..loginLatest is when the reading was taken.
+local function useTrackerReading(reading, loginEarliest, loginLatest)
+    local when = clock.formatUtc(loginLatest)
+    if loginEarliest ~= loginLatest then
+        when = clock.formatUtc(loginEarliest) .. "-" .. when
+    end
+    local what = "no timer (" .. reading.minutes .. " min, not alive)"
+    if reading.alive then
+        what = "tree up"
+    elseif reading.minutes > worldstate.TRACKER_MAX_MINUTES then
+        what = "spawn in " .. formatMinutes(reading.minutes * MS_PER_MINUTE)
+            .. " ignored (over " .. formatMinutes(worldstate.TRACKER_MAX_MINUTES * MS_PER_MINUTE)
+            .. ": may be a dead trunk's)"
+    elseif reading.minutes > 0 then
+        what = "spawn in " .. formatMinutes(reading.minutes * MS_PER_MINUTE)
+    end
+    addCapture("activity tracker: " .. what .. " (login " .. when .. ")")
+    noteChange(worldstate.applyTracker(store.worlds, currentWorld.number, reading,
+        loginEarliest, loginLatest, clock.isSynced()))
+end
+
+-- Reads the activity tracker once per login, as soon as we know the world
+-- and the time. Called from the Logic handler while a login is pending.
+local function checkTrackerLogin()
+    local now = clock.now()
+    if currentWorld.number == nil or now == nil then
+        return              -- not yet: try again on a later frame
+    end
+    local result = tracker.takeLoginReading(now)
+    if result.skipped ~= nil then
+        addCapture("activity tracker skipped: " .. result.skipped)
+        return
+    end
+    useTrackerReading(result.reading, result.loginEarliest, result.loginLatest)
+end
+
+-- The tracker's variables changed mid-game (not seen so far, but if the
+-- server does it, the new values describe right now).
+tracker.setOnLiveChange(function(reading)
+    local now = clock.now()
+    if currentWorld.number == nil or now == nil then
+        return              -- mid-hop: the login reading will cover it
+    end
+    useTrackerReading(reading, now, now)
+end)
+
+-- Logging in, hopping, logging out. Leaving the game is saved straight
+-- away (a hop turns dev plugins off in the beta), so that after a restart
+-- the tracker knows the login came after this moment.
+local function onGameStateChanged(event)
+    currentWorld.onGameStateChanged(event)
+    tracker.onGameStateChanged(event, clock.now())
+    local now = clock.now()
+    if event.newState ~= GameState.GAME and store.lastWorld ~= nil and now ~= nil then
+        store.lastWorld.leftAt = now
+        store.saveNow(now)
+    end
+end
+
 -- A new page of Spirit tree / Queen of Sunrise dialogue.
 dialogue.setOnPage(function(speaker, text)
     local facts = parser.parseDialogue(speaker, text)
@@ -518,6 +584,9 @@ Event.Logic.Subscribe("evilTrees", safe.handler("Logic", function(event)
     if pendingWorld ~= nil and clock.now() ~= nil then
         rememberWorld(pendingWorld)
     end
+    if tracker.isPending() then
+        checkTrackerLogin()
+    end
     if event.logicTick % PANEL_EVERY_TICKS == 0 then
         -- The world whose tree is in view pauses its timers: the game tells
         -- us when that tree changes. "x and y or nil" is Lua's x ? y : nil.
@@ -546,10 +615,12 @@ Event.ServerLogic.Subscribe("evilTrees", safe.handler("ServerLogic", function()
     end
 end))
 
--- Game variables changing: the clock's minute variable and the examine text.
+-- Game variables changing: the clock's minute variable, the examine text,
+-- and the activity tracker's evil tree variables.
 Event.VarTransmit.Subscribe("evilTrees", safe.handler("VarTransmit", function(event)
     clock.onVarTransmit(event)
     examine.onVarTransmit(event)
+    tracker.onVarTransmit(event)
 end))
 
 -- Game objects (locs) appearing, disappearing and animating: evil trees.
@@ -564,7 +635,7 @@ Event.NPCEntityAdded.Subscribe("evilTrees", safe.handler("NPCEntityAdded", light
 Event.ChatMessage.Subscribe("evilTrees", safe.handler("ChatMessage", chat.onChatMessage))
 
 -- Logging in, hopping worlds, logging out.
-Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", currentWorld.onGameStateChanged))
+Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", onGameStateChanged))
 
 -- The dashboard (or the plain debug panel).
 if USE_RIBBON then
@@ -594,6 +665,7 @@ end
 -------------------------------------------------------------------------------
 
 currentWorld.start()   -- the tree scan runs once the world is known (see setOnChange above)
+tracker.start(Player.IsAvailable(), previousLeftAt)
 refreshPanel()
 
 -- Called by the client when the plugin is turned off or the client closes.

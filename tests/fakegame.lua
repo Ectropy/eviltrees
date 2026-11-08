@@ -16,6 +16,7 @@ local game = {
   saved = {},         -- PersistentDB contents
   interfaces = {},    -- ["550:48"] = text shown in interface 550, component 48
   locs = {},          -- locs[locId] = { { isValid = true, coordGrid = {...} } } for LocList.ByConfigID
+  varbits = {},       -- varbits[-20747] = 52 for var.VarPlayer.FromID
   lastText = nil,     -- the most recent ui.Text created (the plain debug panel)
   tick = 0,
 }
@@ -48,7 +49,14 @@ PersistentDB = {
 
 Player = { IsAvailable = function() return true end }
 GameState = { GAME = 1 }
-var = { VarPlayer = { CLOCK_TIME_DATE_MINUTES = { value = game.MINUTE_NOW } } }
+var = { VarPlayer = {
+  CLOCK_TIME_DATE_MINUTES = { value = game.MINUTE_NOW },
+  FromID = function(varId)
+    local value = game.varbits[varId]
+    if value == nil then return nil end
+    return { value = value }
+  end,
+} }
 LocList = { ByConfigID = function(locId) return game.locs[locId] or {} end }
 id = { Font = {}, Component = {}, StyleSheet = {} }
 

@@ -204,11 +204,36 @@ handlers.ChatMessage({ senderNameUnfiltered = "", chatMessage = ALERT })
 check("M9 alert: tree gone", store.worlds[204].status, "none")
 check("M9 alert: spawn source", store.worlds[204].spawnSource, "timer")
 
+-- the activity tracker (two varbits sent at login). The start-up login was
+-- skipped: no saved "left the game" time, so its time is unknown (the log
+-- is checked at the end).
+-- Leaving the game saves the moment straight away.
+handlers.GameStateChanged({ newState = 99 })
+check("M10 left at saved", store.lastWorld.leftAt ~= nil, true)
+-- A login we see happen: the reading is used once the world is known.
+game.varbits[-20747] = 38
+game.varbits[-20746] = 0
+handlers.GameStateChanged({ newState = GameState.GAME })
+server(5)                -- the world is read a few ticks after logging in
+logic(1)
+check("M10 tracker timer", store.worlds[204].spawnSource, "tracker")
+check("M10 tracker: no tree", store.worlds[204].status, "none")
+-- An unchanged value sent again is not a new reading; a real change is.
+game.varbits[-20747] = 0
+game.varbits[-20746] = 1
+handlers.VarTransmit({ var = { id = -20746, typeName = "VarPlayer" }, oldValue = 1, newValue = 1 })
+check("M11 unchanged ignored", store.worlds[204].status, "none")
+handlers.VarTransmit({ var = { id = -20746, typeName = "VarPlayer" }, oldValue = 0, newValue = 1 })
+check("M11 tree up mid-game", store.worlds[204].status, "alive")
+
 PluginShutdown()
 check("M4 saved worlds", type(saved.worlds), "table")
 check("M8 log shows unloaded", saved.captureLog ~= nil and string.find(saved.captureLog, "tree unloaded: sapling 4/5 at 2702,3640", 1, true) ~= nil, true)
 check("M4 log has merges", saved.captureLog ~= nil and string.find(saved.captureLog, "-> record now", 1, true) ~= nil, true)
 check("M4 log shows replacement", saved.captureLog ~= nil and string.find(saved.captureLog, "(replaced sapling3)", 1, true) ~= nil, true)
+check("M10 log shows the skipped start-up", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker skipped: login time unknown (reloaded without leaving the game)", 1, true) ~= nil, true)
+check("M10 log shows the reading", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker: spawn in 38m (login ", 1, true) ~= nil, true)
+check("M11 log shows tree up", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker: tree up", 1, true) ~= nil, true)
 check("M9 log shows the alert", saved.captureLog ~= nil and string.find(saved.captureLog, "activity alert: spawn in 5m", 1, true) ~= nil, true)
 check("M5 no errors", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
