@@ -15,7 +15,8 @@
                       (spawnAt is always inside it)
         spawnSource   what last narrowed that window: "timer" (spirit tree /
                       crown / helm countdown, or the activity tracker's
-                      chat alert) | "sapling" (a sapling seen,
+                      chat alert) | "tracker" (the activity tracker's
+                      timer, read at login) | "sapling" (a sapling seen,
                       or said to exist) | "step" (watched a sapling stage
                       change)
         matureAt      when the sapling became a full tree ("M"). Best estimate.
@@ -666,6 +667,76 @@ function worldstate.applyDialogue(worlds, world, facts, now, secondsKnown)
                 becomeSapling(record, now)
                 choose(record, "spawn")
             end
+        end
+    end)
+end
+
+-------------------------------------------------------------------------------
+-- Activity tracker (two game variables, sent when you log in or hop)
+-------------------------------------------------------------------------------
+
+-- The tracker's minutes are only trusted up to this. Logged in during a
+-- dead trunk, it gave 126 when the next tree came 107 min later (W205,
+-- 2026-11-08): it seems to give the LATEST the next tree can come (fade +
+-- 2:00) then. After a fade the wait has been 1:40-1:51, so anything above
+-- 1:50 may be one of those. (User's call, 2026-11-08.)
+worldstate.TRACKER_MAX_MINUTES = 110
+
+-- reading comes from capture/tracker.lua: { minutes = 52, alive = false }.
+-- The server sends it once, at login or hop, and never updates it (the
+-- tracker's "Available in 00:52" doesn't count down), so it describes the
+-- moment of login. We don't always know that moment to the second: after a
+-- restart only "between leaving the last world and now". So the caller
+-- gives a window, loginEarliest..loginLatest (both Unix ms).
+-- secondsKnown is optional, see clockSlackFor.
+--   minutes > 0, alive false: the same as a spirit-tree "approximately N
+--       minutes" heard at login (it rounds down the same way: tracker 38 and
+--       the spirit tree's "38 minutes" 2 s apart, W205 2026-11-08).
+--   alive true: a tree was up at login, sapling or grown (it was 1 for a
+--       4-minute-old sapling; 0 for a dead trunk). Only used when we knew
+--       of no tree. With a spawn timer that fits, the timer decides sapling
+--       or grown; without one it's taken as a full tree, like the spirit
+--       tree's "help dispatch" greeting.
+--   Ignored: minutes over TRACKER_MAX_MINUTES, or while we know the dead
+--       trunk is still there (then the minutes aren't the real timer), and
+--       minutes 0 with alive false (meaning unknown).
+function worldstate.applyTracker(worlds, world, reading, loginEarliest, loginLatest, secondsKnown)
+    return update(worlds, world, loginLatest, function(record)
+        if reading.alive then
+            if record.status ~= "none" then
+                return          -- a sapling, tree or trunk we already know about
+            end
+            -- The tree spawned before the login. If a spawn timer agrees,
+            -- it says more than "up" does (it may still be a sapling): cut
+            -- its window off at the login and let the timed rules (see
+            -- runTimers) turn it into a sapling and then a tree.
+            if record.spawnEarliest ~= nil and record.spawnEarliest <= loginLatest then
+                if record.spawnLatest > loginLatest then
+                    narrow(record, "spawn", record.spawnEarliest, loginLatest, "tracker")
+                    choose(record, "spawn")
+                end
+                return
+            end
+            -- No timer, or one that said the tree was still to come (wrong
+            -- or old): drop it. All we know is that a tree was up.
+            forgetWindow(record, "spawn")
+            becomeAlive(record, loginLatest, record.health)
+        elseif reading.minutes ~= nil and reading.minutes > 0
+            and reading.minutes <= worldstate.TRACKER_MAX_MINUTES
+            and record.status ~= "dead" then
+            -- Like any spawn timer: the tree we had is gone.
+            if hasTree(record) then
+                forgetTree(record)
+            end
+            -- The earliest spawn comes from the earliest login, the latest
+            -- from the latest. timerWindow returns two values (earliest,
+            -- latest); "local _, x = f()" keeps just the second, and a
+            -- plain "local x = f()" keeps just the first.
+            local timerMs = reading.minutes * MINUTE
+            local earliest = timerWindow(timerMs, loginEarliest)
+            local _, latest = timerWindow(timerMs, loginLatest)
+            narrow(record, "spawn", earliest, latest + clockSlackFor(secondsKnown), "tracker")
+            record.spawnAt = (record.spawnEarliest + record.spawnLatest) // 2
         end
     end)
 end

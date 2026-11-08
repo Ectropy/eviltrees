@@ -634,6 +634,66 @@ ws.applyDialogue(WA3, 1, a1, t("10:00:00"))
 check("A8 old tree forgotten", WA3[1].status, "none")
 check("A8 type forgotten", WA3[1].treeType, nil)
 
+---------------------------------------------------------------- K: activity tracker (read at login)
+local SPIRIT_38 = "The taint of the evil tree is not currently on the land. There will be another evil tree in approximately 38 minutes."
+-- Hop to W205, seen live at 02:48:05: tracker 38, then the spirit tree's
+-- "38 minutes" at 02:48:09 (real readings, 2026-11-08).
+local WK = {}
+check("K1 change", ws.applyTracker(WK, 205, { minutes = 38, alive = false }, t("02:48:05"), t("02:48:05")), true)
+checkTime("K1 earliest", WK[205].spawnEarliest, "03:26:05")
+checkTime("K1 latest", WK[205].spawnLatest, "03:27:05")
+check("K1 source", WK[205].spawnSource, "tracker")
+check("K1 status", WK[205].status, "none")
+ws.applyDialogue(WK, 205, parser.parseDialogue("Spirit tree", SPIRIT_38), t("02:48:09"))
+checkTime("K1b spirit tree narrows", WK[205].spawnEarliest, "03:26:09")
+checkTime("K1b latest kept", WK[205].spawnLatest, "03:27:05")
+-- After a restart (beta hop to W204): left at 02:34:40, plugin back at
+-- 02:35:00 with the clock minute-only. Tracker 52. The sapling really came
+-- at 03:27:15-18: inside the window.
+local WK2 = {}
+ws.applyTracker(WK2, 204, { minutes = 52, alive = false }, t("02:34:40"), t("02:35:00"), false)
+checkTime("K2 earliest from leaving", WK2[204].spawnEarliest, "03:26:40")
+checkTime("K2 latest from now + slack", WK2[204].spawnLatest, "03:29:00")
+-- A tree up at login, and we knew nothing: a full tree, like the "help
+-- dispatch" greeting (dies within 30 min of the login).
+local WK3 = {}
+ws.applyTracker(WK3, 205, { minutes = 0, alive = true }, t("03:31:00"), t("03:31:20"))
+check("K3 alive", WK3[205].status, "alive")
+local lk, ak = ws.nextEvent(WK3[205], t("03:31:20"))
+check("K3 dies within", lk, "dies within")
+checkTime("K3 at most 30 min", ak, "04:01:20")
+-- Up at login, and a spawn timer agrees (spawned before the login): the
+-- timer stays in charge, cut off at the login.
+local WK4 = { [205] = { status = "none", spawnAt = t("03:26:45"), spawnEarliest = t("03:26:22"), spawnLatest = t("03:27:09") } }
+check("K4 fits: no change", ws.applyTracker(WK4, 205, { minutes = 0, alive = true }, t("03:31:00"), t("03:31:20")), false)
+local WK4b = { [205] = { status = "none", spawnAt = t("03:31:30"), spawnEarliest = t("03:31:00"), spawnLatest = t("03:32:00") } }
+ws.applyTracker(WK4b, 205, { minutes = 0, alive = true }, t("03:31:10"), t("03:31:20"))
+checkTime("K4b cut at login", WK4b[205].spawnLatest, "03:31:20")
+check("K4b still for the timers", WK4b[205].status, "none")
+-- Up at login, but our timer said it was still to come: the timer was wrong.
+local WK5 = { [205] = { status = "none", spawnAt = t("03:50:30"), spawnEarliest = t("03:50:00"), spawnLatest = t("03:51:00") } }
+ws.applyTracker(WK5, 205, { minutes = 0, alive = true }, t("03:31:00"), t("03:31:20"))
+check("K5 alive", WK5[205].status, "alive")
+check("K5 timer dropped", WK5[205].spawnAt, nil)
+-- A sapling we already know about stays a sapling.
+local WK6 = { [205] = { status = "sapling", spawnAt = t("03:27:00"), spawnEarliest = t("03:26:50"), spawnLatest = t("03:27:10") } }
+check("K6 sapling untouched", ws.applyTracker(WK6, 205, { minutes = 0, alive = true }, t("03:30:00"), t("03:30:00")), false)
+-- 0 minutes and not alive: meaning unknown, ignored.
+check("K7 ignored", ws.applyTracker({}, 1, { minutes = 0, alive = false }, t("10:00:00"), t("10:00:00")), false)
+-- Logged in during a dead trunk (real W205 reading, 2026-11-08): 126 is not
+-- the real timer (the next tree came 107 min later), so it's ignored...
+check("K9 over 1h50m ignored", ws.applyTracker({}, 205, { minutes = 126, alive = false }, t("04:05:00"), t("04:05:00")), false)
+check("K9b 1h50m still used", ws.applyTracker({}, 205, { minutes = 110, alive = false }, t("04:05:00"), t("04:05:00")), true)
+-- ...and so is any timer while we know the trunk is still there.
+local WK10 = { [205] = { status = "dead", treeType = "magic", deadAt = t("04:02:12") } }
+check("K10 trunk kept", ws.applyTracker(WK10, 205, { minutes = 100, alive = false }, t("04:05:00"), t("04:05:00")), false)
+-- A timer at login means the tree we had is gone.
+local WK8 = { [1] = { status = "alive", treeType = "oak", matureAt = t("09:00:00"), matureEarliest = t("09:00:00"), matureLatest = t("09:00:00") } }
+ws.applyTracker(WK8, 1, { minutes = 100, alive = false }, t("10:00:00"), t("10:00:00"))
+check("K8 tree forgotten", WK8[1].status, "none")
+check("K8 type forgotten", WK8[1].treeType, nil)
+checkTime("K8 spawn", WK8[1].spawnEarliest, "11:40:00")
+
 ---------------------------------------------------------------- D: low health assumes the strikes happened (W205 oak, 2026-11-07)
 -- Only told "alive", then found at <=25%: strike 2 assumed done, so it dies
 -- within 10 min (the real tree died 14 s later). Was "dies within 29 min".
