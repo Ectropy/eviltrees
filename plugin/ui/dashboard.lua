@@ -6,6 +6,7 @@
     client loads it first and gives us the global "prettyui").
 
     It only puts on screen what core/overview.lua decided:
+      - an "All worlds" button that opens or closes ui/grid.lua's window
       - the world you're on: tree, health, countdown, place, Clear world
       - other worlds with intel, soonest event first
       - optionally, a debug section (main.lua's SHOW_DEBUG)
@@ -47,6 +48,7 @@ local signature = nil       -- the signature of what's on screen now
 local countdowns = {}       -- { { text = <ui.Text>, world = 204 }, ... }
 local debugClock = nil      -- the debug section's first line, updated in place
 local onClear = nil         -- function(worldNumber), set by main.lua
+local onToggleGrid = nil    -- function(), set by main.lua
 local freshParent = false   -- true from opening the page until the first build works
 
 -- Removes the view (if any). Destroy can fail if the page was already
@@ -61,6 +63,11 @@ end
 -- main.lua gives the function that clears a world's data.
 function dashboard.setOnClear(fn)
     onClear = fn
+end
+
+-- main.lua gives the function that opens or closes the world grid.
+function dashboard.setOnToggleGrid(fn)
+    onToggleGrid = fn
 end
 
 -- Asks "are you sure?" before clearing, since it can't be undone.
@@ -132,6 +139,11 @@ local function build(model, now, debugLines)
 
     view:AddTitle("Evil Trees")
     view:AddText({ text = "Scouted " .. model.scouted .. " / " .. model.total .. " worlds", colour = MUTED })
+    view:AddSimpleButton("All worlds", function()
+        if onToggleGrid ~= nil then
+            onToggleGrid()
+        end
+    end, { tooltip = "Show or hide the grid of every world" })
 
     -- The world you're on.
     local current = model.current

@@ -71,6 +71,7 @@ check("O4 current world, no intel", shows("w204 (you're here)"), true)
 check("O5 no other worlds", shows("None yet."), true)
 check("O6 debug section", shows("Debug"), true)
 check("O7 no clear button without intel", button("Clear world"), nil)
+check("O8 all worlds button", button("All worlds") ~= nil, true)
 
 ---------------------------------------------------------------- a spirit tree timer
 interfaces["1184:4"] = "Spirit tree"

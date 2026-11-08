@@ -22,6 +22,7 @@
       capture/lightning.lua     - lightning strikes (the "Thor" NPC)
       capture/chat.lua          - sapling inspect text (optional chatAccess)
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
+      ui/grid.lua               - every world in a floating window (PrettyUI)
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
     Status (in development): dialogue, examine text and tree objects are
@@ -67,6 +68,7 @@ local lightning = require("capture/lightning")
 local chat = require("capture/chat")
 local overview = require("core/overview")
 local dashboard = require("ui/dashboard")
+local grid = require("ui/grid")
 local debugPanel = require("ui/debugpanel")
 
 local VERSION = "0.5.0-dev"
@@ -253,9 +255,13 @@ local function usingDashboard()
     return USE_DASHBOARD and not dashboard.failed
 end
 
--- Redraws the dashboard (or the plain panel). Called once a second.
+-- Redraws the world grid (if wanted), then the dashboard (or the plain
+-- panel). Called once a second.
 local function refreshPanel()
     local now = clock.now()
+    if grid.wantsOpen() then
+        grid.update(overview.cells(store.worlds, worlds.list, currentWorld.number, now), now, worlds.count)
+    end
     if usingDashboard() and not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
@@ -284,6 +290,22 @@ local function noteChange(changed)
     capturelog.add(line)
     devlog.print("[state]", line)
 end
+
+-- The world grid needs PrettyUI too. Reopen it if it was open last time
+-- (e.g. before a world hop), and save where the player puts it.
+if prettyui ~= nil then
+    grid.restore(store.gridWindow)
+end
+grid.setOnLayoutChange(function(state)
+    store.gridWindow = state
+    store.markChanged()
+end)
+
+-- The dashboard's "All worlds" button.
+dashboard.setOnToggleGrid(function()
+    grid.toggle()
+    refreshPanel()
+end)
 
 -- The dashboard's "Clear world" button (after the player confirms).
 dashboard.setOnClear(function(number)
@@ -524,5 +546,6 @@ function PluginShutdown()
     store.saveNow(clock.now())
     capturelog.saveIfChanged()
     dashboard.destroy()
+    grid.destroy()
     debugPanel.destroy()
 end

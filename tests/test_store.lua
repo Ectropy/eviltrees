@@ -40,12 +40,16 @@ store.worlds[204] = {
   hint = "close to the village you call 'Seers'", earlierHints = { "on the island known as Karamja" }, health = 50, tileX = 2702,
 }
 store.lastWorld = { number = 205, seenAt = 1793940389123 }
+store.gridWindow = { x = 60, y = 80, width = 762, height = 330, open = 1 }
 store.saveNow(1793940389123)
 check("in-memory record untouched by saving", store.worlds[204].spawnAt, 1793945263552)
 
 store.worlds = {}
 store.lastWorld = nil
+store.gridWindow = nil
 check("loaded count", store.load(), 1)
+check("grid window kept", store.gridWindow and store.gridWindow.width, 762)
+check("grid window open flag", store.gridWindow and store.gridWindow.open, 1)
 local r = store.worlds[204]
 check("spawnAt exact", r.spawnAt, 1793945263552)
 check("spawnEarliest exact", r.spawnEarliest, 1793945232000)
