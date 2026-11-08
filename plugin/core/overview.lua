@@ -23,6 +23,12 @@
         }
     The heading and place change rarely; the countdown changes every second,
     so it is made separately by overview.countdownText(row, now).
+
+    overview.cells(...) is the same information for the world grid: one
+    small "cell" for EVERY world (with intel or not), in world order. A cell
+    is a row (above) plus a few short fields, see buildCell. Its countdown
+    is overview.cellCountdown(cell, now): whole minutes ("29m") until the
+    last minute, then seconds ("45s"), so it changes once a minute.
 ]]
 
 local worldstate = require("core/worldstate")
@@ -177,6 +183,108 @@ function overview.build(worlds, currentNumber, now, totalWorlds)
         result.current = buildRow(currentNumber, worlds[currentNumber], now)
     end
     return result
+end
+
+-------------------------------------------------------------------------------
+-- The world grid
+-------------------------------------------------------------------------------
+
+-- Tree types in a word, for cells.
+local SHORT_TYPES = {
+    tree = "Tree", oak = "Oak", willow = "Willow", maple = "Maple",
+    yew = "Yew", magic = "Magic", elder = "Elder",
+}
+
+-- What a cell is showing, which picks its colour:
+--   "unknown"  no intel at all
+--   "none"     intel (e.g. a hint) but no tree and no spawn time
+--   "spawn"    no tree yet, spawn time known
+--   "sapling" | "alive" | "dead"   the record's status
+local function cellKind(record)
+    if record == nil then
+        return "unknown"
+    end
+    if record.status == "none" then
+        return record.spawnAt ~= nil and "spawn" or "none"
+    end
+    return record.status
+end
+
+-- One world's cell: everything buildRow gives (heading, place, event),
+-- plus:
+--   members   true (P2P) | false (F2P) | nil (not in data/worlds.lua,
+--             e.g. the beta worlds)
+--   current   true for the world you're on
+--   kind      see cellKind
+--   treeType  "Willow" (or nil)
+--   health    "95%" or "<=50%" (alive trees only, or nil)
+local function buildCell(number, members, record, currentNumber, now)
+    local cell = buildRow(number, record, now)
+    cell.members = members
+    cell.current = (number == currentNumber)
+    cell.kind = cellKind(record)
+    if record ~= nil then
+        cell.treeType = SHORT_TYPES[record.treeType]   -- nil if no type (SHORT_TYPES[nil] is nil)
+        if record.status == "alive" then
+            cell.health = describeHealth(record)
+        end
+    end
+    return cell
+end
+
+-- Milliseconds -> "1h42m", "29m", or "45s" in the last minute. Like
+-- EctoTrees, whole minutes until the final minute. Rounds down, like
+-- formatDuration, so a cell never shows more time than the detail view.
+function overview.shortDuration(ms)
+    local totalSeconds = math.max(0, ms // 1000)
+    if totalSeconds < 60 then
+        -- string.format, not "..": a float (45.0) would join as "45.0s".
+        return string.format("%ds", totalSeconds)
+    end
+    local hours = totalSeconds // 3600
+    local minutes = (totalSeconds % 3600) // 60
+    if hours > 0 then
+        return string.format("%dh%02dm", hours, minutes)
+    end
+    return string.format("%dm", minutes)
+end
+
+-- A cell's countdown: "29m", or "~29m" when the time is approximate.
+-- nil if nothing is due or the clock isn't running yet.
+function overview.cellCountdown(cell, now)
+    if cell.eventAt == nil or now == nil then
+        return nil
+    end
+    return (cell.approximate and "~" or "") .. overview.shortDuration(cell.eventAt - now)
+end
+
+-- Builds every cell, in world-number order. worldList is data/worlds.lua's
+-- list. Worlds that aren't in it still get a cell when we're on them or
+-- have a record for them (the beta worlds 204/205, or a world added to the
+-- game after our list was written).
+function overview.cells(worlds, worldList, currentNumber, now)
+    local cells = {}
+    local added = {}            -- added[204] = true once 204 has a cell (a Set in JS)
+
+    for _, entry in ipairs(worldList) do
+        cells[#cells + 1] = buildCell(entry.number, entry.members, worlds[entry.number], currentNumber, now)
+        added[entry.number] = true
+    end
+
+    -- Worlds missing from the list. Members unknown, so nil.
+    local function addUnlisted(number)
+        if number ~= nil and not added[number] then
+            cells[#cells + 1] = buildCell(number, nil, worlds[number], currentNumber, now)
+            added[number] = true
+        end
+    end
+    addUnlisted(currentNumber)
+    for number in pairs(worlds) do      -- pairs with one variable: just the keys
+        addUnlisted(number)
+    end
+
+    table.sort(cells, function(a, b) return a.world < b.world end)
+    return cells
 end
 
 return overview

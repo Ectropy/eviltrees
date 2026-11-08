@@ -125,5 +125,66 @@ row = overview.build({ [1] = guessed }, 1, NOW, 137).current
 check("H8 rough M: heading", row.heading, "w1 - Evil tree")
 check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30:00")
 
+---------------------------------------------------------------- S: short durations (grid cells)
+check("S1 seconds in the last minute", overview.shortDuration(45 * 1000), "45s")
+check("S2 just under a minute", overview.shortDuration(59999), "59s")
+check("S3 exactly a minute", overview.shortDuration(MINUTE), "1m")
+check("S4 minutes round down", overview.shortDuration(29 * MINUTE + 59000), "29m")
+check("S5 hours", overview.shortDuration(102 * MINUTE), "1h42m")
+check("S6 hours, few minutes", overview.shortDuration(65 * MINUTE), "1h05m")
+check("S7 overdue", overview.shortDuration(-3000), "0s")
+check("S8 float input", overview.shortDuration(45000.0), "45s")
+
+---------------------------------------------------------------- G: grid cells
+local worldList = {
+  { number = 3, members = false },
+  { number = 12, members = true },
+  { number = 86, members = true },
+  { number = 117, members = true },
+  { number = 118, members = true },
+}
+-- On 204 (a beta world, not in the list); "worlds" (above) has a record for it.
+local cells = overview.cells(worlds, worldList, 204, NOW)
+check("G1 one cell per listed world, plus 204", #cells, 6)
+check("G2 world order", cells[1].world .. "," .. cells[5].world .. "," .. cells[6].world, "3,118,204")
+
+local byWorld = {}
+for _, cell in ipairs(cells) do byWorld[cell.world] = cell end
+
+check("G3 no intel", byWorld[118].kind, "unknown")
+check("G3 no intel: no countdown", overview.cellCountdown(byWorld[118], NOW), nil)
+check("G3 members", byWorld[118].members, true)
+check("G4 hint only", byWorld[3].kind, "none")
+check("G4 F2P", byWorld[3].members, false)
+check("G5 spawn", byWorld[117].kind, "spawn")
+check("G5 spawn countdown", overview.cellCountdown(byWorld[117], NOW), "30m")
+check("G6 sapling", byWorld[86].kind, "sapling")
+check("G6 sapling countdown (last 2 min)", overview.cellCountdown(byWorld[86], NOW + 61000), "59s")
+check("G7 dead", byWorld[12].kind, "dead")
+check("G7 dead type", byWorld[12].treeType, "Oak")
+check("G7 dead: no health", byWorld[12].health, nil)
+
+local here = byWorld[204]
+check("G8 current", here.current, true)
+check("G8 others not current", byWorld[3].current, false)
+check("G8 unlisted: members unknown", here.members, nil)
+check("G8 alive", here.kind, "alive")
+check("G8 type", here.treeType, "Willow")
+check("G8 health", here.health, "45%")
+check("G8 tooltip heading", here.heading, "w204 - Evil willow - 45%")
+check("G8 place", here.place, "East of the house portal in Rellekka")
+
+-- A record for an unlisted world we're not on still gets a cell; the
+-- current world gets one even with no record.
+cells = overview.cells({ [205] = { status = "none", spawnAt = NOW + MINUTE } }, worldList, 204, NOW)
+check("G9 count", #cells, 7)
+check("G9 order", cells[6].world .. "," .. cells[7].world, "204,205")
+check("G9 current, no record", cells[6].kind .. "," .. tostring(cells[6].current), "unknown,true")
+-- Approximate times get "~".
+cells = overview.cells({ [3] = { status = "none", spawnAt = NOW + 5 * MINUTE,
+                                 spawnEarliest = NOW, spawnLatest = NOW + 5 * MINUTE } }, worldList, nil, NOW)
+check("G10 approximate", overview.cellCountdown(cells[1], NOW), "~5m")
+check("G11 no clock", overview.cellCountdown(cells[1], nil), nil)
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
