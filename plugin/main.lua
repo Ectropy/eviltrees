@@ -458,10 +458,12 @@ end)
 -- Each Subscribe takes a name (used to unsubscribe later) and a handler.
 -- safe.handler logs any error instead of losing it.
 
--- 50 times a second: keep the clock ticking. Once a second: run the timed
+-- 50 times a second: keep the clock ticking, and read dialogue on the frame
+-- after each server tick (see capture/dialogue.lua). Once a second: run the timed
 -- rules (this also catches up after start-up) and refresh the panel.
 Event.Logic.Subscribe("evilTrees", safe.handler("Logic", function(event)
     clock.onLogic(event)
+    dialogue.onLogic()
     if pendingWorld ~= nil and clock.now() ~= nil then
         rememberWorld(pendingWorld)
     end

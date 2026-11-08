@@ -14,10 +14,18 @@
          parser.MESSAGE_BOX_SPEAKER.
 
     Both interfaces are only loaded while the box is on screen (seen when testing
-    in the beta client). We check every server tick (~0.6 s), much shorter than anyone
-    spends on a page, and report each new page once through the callback
+    in the beta client). We report each new page once through the callback
     given to dialogue.setOnPage(). Deciding what the text means is the
     parser's job, not this file's.
+
+    When to read: once per server tick (~0.6 s), but on the client frame
+    AFTER the server tick, not during it. The probe (2026-11-07) showed the game
+    fills in a page's text one frame (20 ms) after the server packet arrives:
+    a read during Event.ServerLogic sees the previous page, or an empty box.
+    When clicking quickly, each page lasts exactly one server tick, so the
+    last page before the box closes (the Spirit tree's location hint) was
+    never read. Reading on the next frame sees each page as soon as it shows,
+    and it's still only one read per server tick.
 ]]
 
 local safe = require("core/safe")
@@ -33,6 +41,7 @@ local BOXES = {
 
 local onPage = nil      -- function(speaker, text), set by main.lua
 local lastPage = {}     -- [box name] = "speaker|text" of the page we last reported
+local readNextFrame = false  -- set each server tick; the next frame reads the boxes
 
 -- Reads a label's text from an interface, or nil if it isn't there.
 local function readLabel(interfaceId, componentId)
@@ -74,8 +83,19 @@ function dialogue.setOnPage(callback)
     onPage = callback
 end
 
--- Event.ServerLogic handler.
+-- Event.ServerLogic handler: the page text isn't there yet, so just ask the
+-- next frame to read it (see the header).
 function dialogue.onServerTick()
+    readNextFrame = true
+end
+
+-- Event.Logic handler (50 times a second). Does nothing except on the first
+-- frame after a server tick.
+function dialogue.onLogic()
+    if not readNextFrame then
+        return
+    end
+    readNextFrame = false
     for _, box in ipairs(BOXES) do
         checkBox(box)
     end

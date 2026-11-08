@@ -139,9 +139,13 @@ handlers.ChatMessage({ senderNameUnfiltered = "", chatMessage = INSPECT })
 check("M1c inspect gives type", store.worlds[204].treeType, "willow")
 check("M1c still a sapling", store.worlds[204].status, "sapling")
 
+-- Like the real game: the server tick comes first, and the page text is
+-- there by the next frame. Dialogue is read on that frame, not during the tick.
+server(1)
 interfaces["1184:4"] = "Queen of Sunrise"
 interfaces["1184:10"] = "Nasty spirits have got at a willow tree sapling. It can be found north as the crow flies from Seers' Village."
-server(1)
+check("M2 not read during the tick", store.worlds[204].hint, nil)
+logic(1)
 check("M2 crown type", store.worlds[204].treeType, "willow")
 check("M2 hint", store.worlds[204].hint, "north as the crow flies from Seers' Village")
 interfaces["1184:4"] = nil; interfaces["1184:10"] = nil

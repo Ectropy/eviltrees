@@ -74,11 +74,12 @@ check("O7 no clear button without intel", button("Clear world"), nil)
 check("O8 all worlds button", button("All worlds") ~= nil, true)
 
 ---------------------------------------------------------------- a spirit tree timer
+server(1)                    -- the page shows on the frame after a server tick
 interfaces["1184:4"] = "Spirit tree"
 interfaces["1184:10"] = "The taint of the evil tree is not currently on the land. There will be another evil tree in approximately 7 minutes."
-server(1)
+logic(1)                     -- dialogue is read on that frame
 interfaces["1184:4"] = nil; interfaces["1184:10"] = nil
-logic(50)                    -- passes logicTick 50: refresh
+logic(49)                    -- passes logicTick 50: refresh
 check("T1 rebuilt", #views, 2)
 check("T1 old view destroyed", views[1].destroyed, true)
 check("T2 heading", shows("w204 - No tree"), true)
