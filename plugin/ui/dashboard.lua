@@ -177,6 +177,7 @@ local function rebuild(model, now, debugLines, newSignature)
     local scrollY = view and view.scrollY or 0
     destroyView()
     view = prettyui.SimpleView.new(parent, {
+        categoryID = "auto",    -- PrettyUI picks free component IDs (its "Component IDs" docs)
         x = 8,
         y = 8,
         width = (parent.width or 300) - 16,
