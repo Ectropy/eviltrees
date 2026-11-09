@@ -27,8 +27,9 @@
     overview.cells(...) is the same information for the world grid: one
     small "cell" for EVERY world (with intel or not), in world order. A cell
     is a row (above) plus a few short fields, see buildCell. Its countdown
-    is overview.cellCountdown(cell, now): whole minutes ("29m") until the
-    last minute, then seconds ("45s"), so it changes once a minute.
+    is overview.cellCountdown(cell, now): whole minutes ("29m", "1h 5m")
+    until the last minute, then seconds ("45s"), so it changes once a
+    minute. For an alive tree it counts to its DEATH, not the next strike.
 ]]
 
 local worldstate = require("core/worldstate")
@@ -220,21 +221,47 @@ end
 --   kind      see cellKind
 --   treeType  "Willow" (or nil)
 --   health    "95%" or "max 50%" (alive trees only, or nil)
+--   status    "Evil willow - 45%", "Oak sapling", "No tree" (or nil: no intel)
+--   deathAt, deathApproximate
+--             when an alive tree dies (worldstate.deathTime), or nil
+--   cellAt, cellApproximate
+--             what the cell counts down to: the death for an alive tree,
+--             else the same as eventAt (spawn, full tree, rewards gone)
+--   icon      "timer" | "sapling" | "tree" | "dead", or nil (nothing known
+--             but maybe a hint): see ui/icons.lua
+--   logs      the tree type ("willow", "tree", ...) for an alive tree whose
+--             type we know: its logs are shown instead of the tree icon; else nil
+local CELL_ICONS = { spawn = "timer", sapling = "sapling", alive = "tree", dead = "dead" }
+
 local function buildCell(number, members, record, currentNumber, now)
     local cell = buildRow(number, record, now)
     cell.members = members
     cell.current = (number == currentNumber)
     cell.kind = cellKind(record)
+    cell.icon = CELL_ICONS[cell.kind]      -- nil for "unknown" and "none"
+    if cell.kind == "alive" then
+        cell.logs = record.treeType
+    end
+    cell.cellAt, cell.cellApproximate = cell.eventAt, cell.approximate
     if record ~= nil then
         cell.treeType = SHORT_TYPES[record.treeType]   -- nil if no type (SHORT_TYPES[nil] is nil)
+        cell.status = describeTree(record)
         if record.status == "alive" then
             cell.health = describeHealth(record)
+            if cell.health ~= nil then
+                cell.status = cell.status .. " - " .. cell.health
+            end
+            -- Two results into two variables, like const [a, b] = f() in JS.
+            cell.deathAt, cell.deathApproximate = worldstate.deathTime(record)
+            if cell.deathAt ~= nil then
+                cell.cellAt, cell.cellApproximate = cell.deathAt, cell.deathApproximate
+            end
         end
     end
     return cell
 end
 
--- Milliseconds -> "1h42m", "29m", or "45s" in the last minute. Like
+-- Milliseconds -> "1h 42m", "1h 5m", "29m", or "45s" in the last minute. Like
 -- EctoTrees, whole minutes until the final minute. Rounds down, like
 -- formatDuration, so a cell never shows more time than the detail view.
 function overview.shortDuration(ms)
@@ -246,18 +273,28 @@ function overview.shortDuration(ms)
     local hours = totalSeconds // 3600
     local minutes = (totalSeconds % 3600) // 60
     if hours > 0 then
-        return string.format("%dh%02dm", hours, minutes)
+        return string.format("%dh %dm", hours, minutes)     -- %d: no leading zero
     end
     return string.format("%dm", minutes)
 end
 
--- A cell's countdown: "29m", or "~29m" when the time is approximate.
--- nil if nothing is due or the clock isn't running yet.
+-- A cell's countdown (to cell.cellAt): "29m", or "~29m" when the time is
+-- approximate. nil if nothing is due or the clock isn't running yet.
 function overview.cellCountdown(cell, now)
-    if cell.eventAt == nil or now == nil then
+    if cell.cellAt == nil or now == nil then
         return nil
     end
-    return (cell.approximate and "~" or "") .. overview.shortDuration(cell.eventAt - now)
+    return (cell.cellApproximate and "~" or "") .. overview.shortDuration(cell.cellAt - now)
+end
+
+-- "Dies in 14:05" (or "Dies in ~14:05"), for a cell whose next event is
+-- a lightning strike, so the death time is shown too. nil otherwise (the
+-- countdown already says when it dies, or it isn't alive).
+function overview.deathText(cell, now)
+    if cell.deathAt == nil or now == nil or cell.eventAt == cell.deathAt then
+        return nil
+    end
+    return "Dies in " .. (cell.deathApproximate and "~" or "") .. overview.formatDuration(cell.deathAt - now)
 end
 
 -- Builds every cell, in world-number order. worldList is data/worlds.lua's

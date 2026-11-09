@@ -130,8 +130,9 @@ check("S1 seconds in the last minute", overview.shortDuration(45 * 1000), "45s")
 check("S2 just under a minute", overview.shortDuration(59999), "59s")
 check("S3 exactly a minute", overview.shortDuration(MINUTE), "1m")
 check("S4 minutes round down", overview.shortDuration(29 * MINUTE + 59000), "29m")
-check("S5 hours", overview.shortDuration(102 * MINUTE), "1h42m")
-check("S6 hours, few minutes", overview.shortDuration(65 * MINUTE), "1h05m")
+check("S5 hours", overview.shortDuration(102 * MINUTE), "1h 42m")
+check("S6 hours, few minutes: no leading zero", overview.shortDuration(65 * MINUTE), "1h 5m")
+check("S6b whole hour", overview.shortDuration(120 * MINUTE), "2h 0m")
 check("S7 overdue", overview.shortDuration(-3000), "0s")
 check("S8 float input", overview.shortDuration(45000.0), "45s")
 
@@ -173,6 +174,33 @@ check("G8 type", here.treeType, "Willow")
 check("G8 health", here.health, "45%")
 check("G8 tooltip heading", here.heading, "w204 - Evil willow - 45%")
 check("G8 place", here.place, "East of the house portal in Rellekka")
+check("G8 status", here.status, "Evil willow - 45%")
+check("G8 icon and logs", here.icon .. "," .. here.logs, "tree,willow")
+check("G3 no intel: no icon", byWorld[118].icon, nil)
+check("G4 hint only: no icon", byWorld[3].icon, nil)
+check("G5 spawn: timer", byWorld[117].icon, "timer")
+check("G6 sapling icon, no logs", byWorld[86].icon .. "," .. tostring(byWorld[86].logs), "sapling,nil")
+check("G7 dead: skull, no logs", byWorld[12].icon .. "," .. tostring(byWorld[12].logs), "dead,nil")
+-- An alive tree's cell counts to its death (M + 30), not the next strike (M + 20).
+check("G8 cell counts to death", overview.cellCountdown(here, NOW), "25m")
+check("G8 next event is still the strike", overview.countdownText(here, NOW), "Lightning in 15:00")
+check("G8 death text", overview.deathText(here, NOW), "Dies in 25:00")
+check("G7 dead status", byWorld[12].status, "Dead oak")
+check("G7 dead: no death text", overview.deathText(byWorld[12], NOW), nil)
+check("G3 no intel: no status", byWorld[118].status, nil)
+
+-- After the last strike the next event IS the death: no separate death text.
+local struck = overview.cells({ [3] = { status = "alive", health = 20, healthSource = "strike",
+    matureAt = NOW - 25 * MINUTE, matureEarliest = NOW - 25 * MINUTE, matureLatest = NOW - 25 * MINUTE } },
+    worldList, nil, NOW)[1]
+check("G12 last strike done: countdown", overview.countdownText(struck, NOW), "Dies in 5:00")
+check("G12 cell", overview.cellCountdown(struck, NOW), "5m")
+check("G12 no extra death text", overview.deathText(struck, NOW), nil)
+
+-- M only roughly known: the cell shows the latest it can die.
+local rough = overview.cells({ [3] = { status = "alive", matureAt = NOW - 15 * MINUTE,
+    matureEarliest = NOW - 31 * MINUTE, matureLatest = NOW } }, worldList, nil, NOW)[1]
+check("G13 rough M: cell shows latest death", overview.cellCountdown(rough, NOW), "30m")
 
 -- A record for an unlisted world we're not on still gets a cell; the
 -- current world gets one even with no record.

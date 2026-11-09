@@ -993,6 +993,21 @@ local function strikeDone(record, k)
     return record.health ~= nil and record.health <= strikeCap(k)
 end
 
+-- When an alive tree dies (Unix ms), and true if that's approximate.
+-- While M is trusted it's our best guess; otherwise the LATEST it can die
+-- (only an upper bound, so not "approximate": it can't be later). Returns
+-- nil if the tree isn't alive or we don't know M at all.
+function worldstate.deathTime(record)
+    if record.status ~= "alive" or record.matureAt == nil then
+        return nil
+    end
+    if not matureTrusted(record) then
+        local at = eventTime(record, 3, true)
+        return at, false
+    end
+    return eventTime(record, 3, false)     -- passes on both of its results
+end
+
 -- What happens next to this world's tree, and when (Unix ms). now may be
 -- nil (clock not running yet); then an alive tree just reports its death.
 -- Returns three values (Lua functions can return several, like returning
@@ -1014,9 +1029,9 @@ function worldstate.nextEvent(record, now)
         return "matures by", record.spawnAt + SAPLING_MATURE_MS, false
     elseif record.status == "alive" and record.matureAt ~= nil then
         if not matureTrusted(record) then
-            -- Only an upper bound, so not "approximate": it can't be later.
-            local at = eventTime(record, 3, true)
-            return "dies within", at, false
+            -- A call at the END of a return list passes on all its results,
+            -- so this returns three values: the label, the time, approximate.
+            return "dies within", worldstate.deathTime(record)
         end
         if now ~= nil then
             for k = 1, 2 do
@@ -1030,8 +1045,7 @@ function worldstate.nextEvent(record, now)
                 end
             end
         end
-        local at, approximate = eventTime(record, 3, false)
-        return "dies by", at, approximate
+        return "dies by", worldstate.deathTime(record)
     elseif record.status == "dead" and record.deadAt ~= nil then
         return "gone by", record.deadAt + DEAD_MS, false
     end
