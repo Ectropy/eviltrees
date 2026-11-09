@@ -21,7 +21,9 @@ local NOW = 1793932200000.0     -- a float: fengari's integers are 32-bit
 local state = 12345
 local function random(a, b)
   state = (state * 1103515245 + 12345) % 2147483648
-  return a + state % (b - a + 1)
+  -- Use the high bits (// 65536): this generator's low bits repeat in
+  -- short cycles, so picking from a 4-item list never hit some items.
+  return a + (state // 65536) % (b - a + 1)
 end
 
 local sample = sampledata.generate(worlds.list, NOW, random)
@@ -43,6 +45,46 @@ end
 check("A3 some rough spawn timers (~)", roughSpawn, true)
 check("A4 some 'dies within'", diesWithin, true)
 check("A5 some timed lightning", lightning, true)
+
+-- What we know varies: place, type and health each come in every flavour.
+local seen = {}
+local function saw(what) seen[what] = (seen[what] or 0) + 1 end
+for number, record in pairs(sample) do
+  if record.tileX ~= nil then saw("tile") end
+  if record.locationClue ~= nil then saw("clue") end
+  if record.earlierHints ~= nil then saw("twoHints") end
+  if record.hint ~= nil and record.earlierHints == nil then saw("oneHint") end
+  if record.tileX == nil and record.locationClue == nil and record.hint == nil then saw("noPlace") end
+  if record.status == "alive" and record.treeType ~= nil then saw("aliveTyped") end
+  if record.status == "alive" and record.treeType == nil then saw("aliveUntyped") end
+  if record.status == "sapling" and record.treeType == nil then saw("saplingUntyped") end
+  if record.status == "dead" and record.treeType == nil then saw("deadUntyped") end
+  if record.healthSource == "examine" then saw("healthExact") end
+  if record.healthSource == "stage" then saw("healthMax") end
+  if record.status == "alive" and record.health == nil then saw("healthUnknown") end
+  if record.spawnSource == "tracker" then saw("trackerTimer") end
+end
+for _, what in ipairs({ "tile", "clue", "twoHints", "oneHint", "noPlace", "aliveTyped", "aliveUntyped",
+                        "saplingUntyped", "deadUntyped", "healthExact", "healthMax", "healthUnknown",
+                        "trackerTimer" }) do
+  check("A8 some " .. what, (seen[what] or 0) > 0, true)
+end
+
+-- Two hints share a place, so the cell shows fewer places than either hint alone.
+local location = require("core/location")
+local narrowed = 0
+for _, record in pairs(sample) do
+  if record.earlierHints ~= nil and #location.forHints(record) >= 1 then narrowed = narrowed + 1 end
+end
+check("A9 two hints always share a place", narrowed, seen.twoHints)
+
+-- Icons: logs for typed trees, the woodcutting tree for untyped ones.
+local logsCells, treeCells = 0, 0
+for _, cell in ipairs(cells) do
+  if cell.icon == "tree" and cell.logs ~= nil then logsCells = logsCells + 1 end
+  if cell.icon == "tree" and cell.logs == nil then treeCells = treeCells + 1 end
+end
+check("A10 some logs icons and some plain tree icons", logsCells > 0 and treeCells > 0, true)
 
 -- Every non-unknown cell has a countdown or a place (nothing blank and odd).
 local blank = 0
