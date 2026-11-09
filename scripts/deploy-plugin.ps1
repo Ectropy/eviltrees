@@ -19,6 +19,10 @@
 .EXAMPLE
     .\scripts\deploy-plugin.ps1 -Lab
     Deploys the local grid lab (research\gridlab, not in git) as dev_plugins\evil-trees-grid-lab.
+
+.EXAMPLE
+    .\scripts\deploy-plugin.ps1 -Sprites
+    Deploys the local sprite lab (research\spritelab, not in git) as dev_plugins\evil-trees-sprite-lab.
 #>
 param(
     # Deploy the research probe instead of the real plugin.
@@ -26,6 +30,9 @@ param(
 
     # Deploy the grid lab (UI experiments) instead of the real plugin.
     [switch]$Lab,
+
+    # Deploy the sprite lab (icon candidates) instead of the real plugin.
+    [switch]$Sprites,
 
     # The beta client's dev_plugins folder.
     [string]$DevPluginsPath = "C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins"
@@ -40,6 +47,9 @@ if ($Probe) {
 } elseif ($Lab) {
     $relative = "research\gridlab"
     $Name = "evil-trees-grid-lab"
+} elseif ($Sprites) {
+    $relative = "research\spritelab"
+    $Name = "evil-trees-sprite-lab"
 } else {
     $relative = "plugin"
     $Name = "evil-trees"
