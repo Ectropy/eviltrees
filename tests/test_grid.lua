@@ -34,6 +34,7 @@ ui = {
 }
 
 local windows = {}          -- every Window created
+local noScrollArea = false  -- true: a PrettyUI without window._scroll (the card can't be pinned)
 local CHROME = 40           -- fake title bar + borders
 prettyui = {
   NewComponent = newComponent,
@@ -52,6 +53,12 @@ prettyui = {
     window.content.width = options.width - 16
     window.viewport = { height = options.height - CHROME }
     window._onScrollWheel = function() end
+    -- The scroll area: under the title bar (32), inside the 8-wide borders.
+    if not noScrollArea then
+      window._scroll = { root = newComponent("ScrollArea") }
+      window._scroll.root:SetPos(8, 32)
+      function window._scroll:Refresh() self.refreshed = true end
+    end
     function window:SetContentHeight(h) self.contentHeight = h end
     function window:SetSize(w, h)
       self.root.width, self.root.height = w, h
@@ -105,13 +112,14 @@ local function cellFor(world)
     if name.content == "w" .. world then return layer end
   end
 end
--- The card: the Layer straight inside the window that isn't a cell. Its
+-- The card: the Layer straight on the window (or in its content) that isn't a cell. Its
 -- Texts in the order grid.lua makes them, by name; its outline Rectangle
 -- and the badge's.
 local function cardParts()
   local layer
   for _, c in ipairs(components) do
-    if c.kind == "Layer" and c.parent == windows[#windows].content and c.h ~= 18 then layer = c end
+    local w = windows[#windows]
+    if c.kind == "Layer" and (c.parent == w.root or c.parent == w.content) and c.h ~= 18 then layer = c end
   end
   local names = { "world", "badge", "status", "place", "countdown" }
   local parts, texts, rectangles = {}, 0, {}
@@ -195,12 +203,22 @@ check("D8 card: white outline on your world", card.border.rgba, 0xFFFFFFFF)
 check("D9 card: willow logs", card.item.object .. "," .. tostring(card.item.hidden), "1519,false")
 check("D10 card: status after the icon", card.status.x, 8 + 18 + 4)
 
+-- The card is pinned: the scroll area moves down by 6 + 80 = 86, and the
+-- card sits on the window above it.
+local area = window._scroll.root
+check("P1 scroll area moved under the card", area.x .. "," .. area.y, "8,118")
+check("P2 scroll area shrunk to fit", area.w .. "," .. area.h, "-16,-126")
+check("P3 scrollbar laid out again", window._scroll.refreshed, true)
+local cardLayer = card.world.parent
+check("P4 card on the window, not in the scrolling content", cardLayer.parent, window.root)
+check("P5 card under the title bar", cardLayer.x .. "," .. cardLayer.y .. "," .. cardLayer.w, "14,38,-28")
+
 -- Layout: content 484 wide -> (484 - 12 + 3) // 101 = 4 columns; cells 5 to 7 go on row 2.
--- The grid starts under the card: 6 + 80 + 6 = 92.
-check("E1 first cell", cellFor(1).x .. "," .. cellFor(1).y, "6,92")
-check("E2 seventh cell on row 2, column 3", cellFor(204).x .. "," .. cellFor(204).y, "208,113")
--- Two rows: 92 + 2 * 21 - 3 + 6 = 137 tall. The window keeps its height.
-check("E3 content height", window.contentHeight, 137)
+-- The card is outside the scroll area, so the grid starts at the top: 6.
+check("E1 first cell", cellFor(1).x .. "," .. cellFor(1).y, "6,6")
+check("E2 seventh cell on row 2, column 3", cellFor(204).x .. "," .. cellFor(204).y, "208,27")
+-- Two rows: 6 + 2 * 21 - 3 + 6 = 51 tall. The window keeps its height.
+check("E3 content height", window.contentHeight, 51)
 check("E4 window height left alone", window.root.height, 400)
 check("E5 size reported for saving", states[#states].width .. "x" .. states[#states].height, "500x400")
 check("E6 still open in the saved state", states[#states].open, 1)
@@ -208,7 +226,7 @@ check("E6 still open in the saved state", states[#states].open, 1)
 -- Wider: everything on one row (884 content -> 8 columns).
 window:SetSize(900, 400)
 grid.update(cells(NOW), NOW, 137)
-check("E7 reflowed to one row", cellFor(204).y, 92)
+check("E7 reflowed to one row", cellFor(204).y, 6)
 
 ---------------------------------------------------------------- ticking
 local before = #components
@@ -260,6 +278,25 @@ check("I4 toggled open again", #windows, 2)
 grid.destroy()
 check("J1 still wanted after shutdown", grid.wantsOpen(), true)
 check("J2 window destroyed", windows[2].destroyed, true)
+
+---------------------------------------------------------------- PrettyUI without _scroll
+-- The card can't be pinned: it goes back into the scrolling content, with
+-- the cells under it (6 + 80 + 6 = 92).
+noScrollArea = true
+grid.update(cells(NOW), NOW, 137)
+check("M1 window opened anyway", #windows, 3)
+card = cardParts()
+check("M2 card in the content", card.world.parent.parent, windows[3].content)
+check("M3 card still filled", card.world.content, "w204")
+-- (The fake Window:Destroy leaves the old cells in the list, so find w1 in this window.)
+local firstCell
+for _, layer in ipairs(cellsOnScreen()) do
+  if layer.parent == windows[3].content and textsOf(layer).content == "w1" then firstCell = layer end
+end
+check("M4 cells under the card", firstCell.y, 92)
+-- (The window is still 900 wide from E7, so one row.)
+check("M5 content height includes the card", windows[3].contentHeight, 92 + 21 - 3 + 6)
+grid.destroy()
 
 ---------------------------------------------------------------- broken PrettyUI
 prettyui.Window.new = function() error("no Window in this PrettyUI") end

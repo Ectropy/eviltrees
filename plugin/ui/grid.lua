@@ -7,8 +7,9 @@
     players; see ui/icons.lua); the countdown is to the tree's death (or its spawn,
     full growth, or the rewards going); hovering shows everything we know.
     A card at the top of the window shows the clicked world (or the one
-    you're on) in full. core/overview.lua decides the words
-    (overview.cells); this file only draws them.
+    you're on) in full. It stays put: only the cells under it scroll.
+    core/overview.lua decides the words (overview.cells); this file only
+    draws them.
 
     How it is drawn (tried out first in the local "grid lab"):
       - Each cell is a few plain game components: a Layer (takes the mouse)
@@ -24,6 +25,9 @@
       - Cells are placed by hand: columns = window width / cell width. When
         the window is resized, they are moved (not rebuilt). The height is
         the player's choice: a short window scrolls, a tall one has space.
+      - The card stays visible while the cells scroll: see pinCard. The
+        window's scroll area (viewport + scrollbar) is moved down by the
+        card's height, and the card sits in the space left above it.
 
     Opening: main.lua calls grid.update once a second. While the player
     wants the grid open, update opens the window if it isn't there yet (so
@@ -59,12 +63,14 @@ local CARD_INNER = 8            -- text margin inside the card
 local BADGE_WIDTH, BADGE_HEIGHT = 32, 16
 local CARD_ICON_SIZE = 18
 local STATUS_Y = 25             -- the status line
-local TOP = PAD + CARD_HEIGHT + 6   -- the grid starts under the card
+local CARD_SPACE = PAD + CARD_HEIGHT    -- the window space the card takes, above the scroll area
 
 local DEFAULT_X, DEFAULT_Y = 60, 80
 local DEFAULT_WIDTH = 934       -- 9 columns: 16 (window edges) + 2 * PAD + 9 * CELL_WIDTH + 8 * GAP
 local DEFAULT_HEIGHT = 430     -- 380 before the card, plus room for it
-local MIN_WIDTH, MIN_HEIGHT = 200, 120
+-- Minimum height: title bar (32) + the card (86) + a scroll area tall
+-- enough for the scrollbar's two arrows and a row of cells (~60) + bottom edge (8).
+local MIN_WIDTH, MIN_HEIGHT = 200, 190
 
 -- Where a colour is "PrettyUI's", it is copied from PrettyUI v1.3.0's own
 -- widgets (it has no public palette), so the grid matches its look: warm
@@ -107,6 +113,7 @@ local views = {}            -- one table per cell on screen, in world order
 local viewsByWorld = {}     -- viewsByWorld[204] = that view
 local worldsKey = nil       -- the world numbers the cells were built for, as text
 local laidOutWidth = nil    -- content width at the last layout
+local gridTop = PAD         -- y of the first row of cells in the scroll area (see pinCard)
 local selectedWorld = nil   -- the clicked world, or nil
 local lastCells, lastNow, lastTotal = nil, nil, nil   -- the latest update's data
 local titleText = nil
@@ -326,17 +333,51 @@ local function buildViews(cells)
     laidOutWidth = nil          -- place them on the next layout
 end
 
+-- Makes room for the card ABOVE the window's scroll area, so the card
+-- doesn't scroll away with the cells. Returns the parent for the card and
+-- the card's x, y in it.
+--
+-- A PrettyUI Window keeps everything that scrolls (the viewport, the
+-- content and the scrollbar) in one Layer, window._scroll.root, placed
+-- just under the title bar and stretched to the window's edges. We move
+-- that Layer down by CARD_SPACE and shrink it by the same amount. PrettyUI
+-- reads the Layer's place and size whenever it lays out the scrollbar
+-- (also on every resize), so the scrollbar, the mouse wheel and the hover
+-- tooltips all follow. _scroll is PrettyUI's internal field (checked in
+-- v1.3.0, like _onScrollWheel below): if a future PrettyUI doesn't have
+-- it, the card goes back into the scrolling content (and scrolls).
+local function pinCard()
+    local scroll = window._scroll
+    local area = scroll and scroll.root     -- like window._scroll?.root in JS
+    if area == nil or area.x == nil or area.y == nil or scroll.Refresh == nil then
+        gridTop = CARD_SPACE + PAD          -- the cells start under the card
+        return window.content, PAD, PAD
+    end
+
+    local left, top = area.x, area.y        -- the window's side border, title bar height
+    -- The anchors (1.0, 1.0) make the size "the window's size + these
+    -- numbers", so it still follows resizes. The bottom border is as thick
+    -- as the side ones (8), as in PrettyUI's window.lua.
+    area:SetPos(left, top + CARD_SPACE)
+    area:SetSize(-2 * left, -(top + CARD_SPACE) - left, 1.0, 1.0)
+    scroll:Refresh()                        -- lay the scrollbar out for the new height
+    gridTop = PAD
+    -- The card goes straight on the window, in the space left above.
+    return window.root, left + PAD, top + PAD
+end
+
 -- The card: built once when the window opens, then filled in by
 -- updateCard. Two anchor tricks (as in PrettyUI's own widgets):
 --   SetSize(w, h, 1.0, 0)   width = the parent's full width + w, so a
 --                           negative w leaves a margin and it follows resizes
 --   SetPos(x, y, 1.0, 0)    x is measured from the parent's RIGHT edge
 local function buildCard()
+    local parent, x, y = pinCard()          -- a function can return several values
     card = {}
-    card.root = prettyui.NewComponent(ui.Layer, window.content)
-    card.root:SetPos(PAD, PAD)
-    card.root:SetSize(-2 * PAD, CARD_HEIGHT, 1.0, 0)
-    card.root.clickthrough = true       -- the mouse wheel still scrolls the window
+    card.root = prettyui.NewComponent(ui.Layer, parent)
+    card.root:SetPos(x, y)
+    card.root:SetSize(-2 * x, CARD_HEIGHT, 1.0, 0)  -- the same margin on both sides
+    card.root.clickthrough = true       -- nothing on the card takes the mouse
     card.background = newRectangle(card.root, true, CARD_BG)
     card.border = newRectangle(card.root, false, BORDER_OTHER)
 
@@ -393,10 +434,10 @@ local function layout()
     for index, view in ipairs(views) do
         local column = (index - 1) % columns    -- % is the remainder, like JS
         local row = (index - 1) // columns      -- // divides and rounds down
-        view.root:SetPos(PAD + column * (CELL_WIDTH + GAP), TOP + row * (CELL_HEIGHT + GAP))
+        view.root:SetPos(PAD + column * (CELL_WIDTH + GAP), gridTop + row * (CELL_HEIGHT + GAP))
     end
     local rows = (#views + columns - 1) // columns  -- rounds up
-    local contentHeight = TOP + rows * (CELL_HEIGHT + GAP) - GAP + PAD
+    local contentHeight = gridTop + rows * (CELL_HEIGHT + GAP) - GAP + PAD
     window:SetContentHeight(contentHeight)     -- how far it scrolls
     laidOutWidth = width
 end
