@@ -33,6 +33,16 @@ ui = {
   Hook = { ONCLICK = "click", ONSCROLLWHEEL = "wheel" },
 }
 
+-- Measuring text: every letter 6 wide, but "8" 20 wide, so the widest
+-- countdown is "~8h 88m" (4 * 6 + 3 * 20 = 84), and a cell is at least
+-- 20 (icon slot) + 24 ("w204") + 6 (gap) + 84 + 3 = 137 wide.
+config = { Font = { MUSEO_SANS_11PT_REGULAR = {
+  GetStringWidth = function(_, text)
+    local _, eights = string.gsub(text, "8", "8")     -- gsub's second result: how many it replaced
+    return #text * 6 + eights * 14
+  end,
+} } }
+
 local windows = {}          -- every Window created
 local noScrollArea = false  -- true: a PrettyUI without window._scroll (the card can't be pinned)
 local CHROME = 40           -- fake title bar + borders
@@ -213,20 +223,30 @@ local cardLayer = card.world.parent
 check("P4 card on the window, not in the scrolling content", cardLayer.parent, window.root)
 check("P5 card under the title bar", cardLayer.x .. "," .. cardLayer.y .. "," .. cardLayer.w, "14,38,-28")
 
--- Layout: content 484 wide -> (484 - 12 + 3) // 101 = 4 columns; cells 5 to 7 go on row 2.
+-- Layout: content 484 wide, a row of 472 -> (472 + 3) // (137 + 3) = 3 columns,
+-- stretched to (472 - 2 * 3) // 3 = 155 wide. Cells 4 to 6 on row 2, 7 on row 3.
 -- The card is outside the scroll area, so the grid starts at the top: 6.
 check("E1 first cell", cellFor(1).x .. "," .. cellFor(1).y, "6,6")
-check("E2 seventh cell on row 2, column 3", cellFor(204).x .. "," .. cellFor(204).y, "208,27")
--- Two rows: 6 + 2 * 21 - 3 + 6 = 51 tall. The window keeps its height.
-check("E3 content height", window.contentHeight, 51)
+check("E1b cells stretched to fill the row", cellFor(1).w, 155)
+check("E1c second cell after the first + a gap", cellFor(2).x, 6 + 155 + 3)
+check("E2 seventh cell on row 3, column 1", cellFor(204).x .. "," .. cellFor(204).y, "6,48")
+-- The texts stretch with the cell (anchored: the cell's width + these numbers).
+local cellName, cellTimer = textsOf(cellFor(1))
+check("E2b name to 3 from the right", cellName.w, -23)
+check("E2c countdown with 3 each side", cellTimer.w, -6)
+-- Three rows: 6 + 3 * 21 - 3 + 6 = 72 tall. The window keeps its height.
+check("E3 content height", window.contentHeight, 72)
 check("E4 window height left alone", window.root.height, 400)
 check("E5 size reported for saving", states[#states].width .. "x" .. states[#states].height, "500x400")
 check("E6 still open in the saved state", states[#states].open, 1)
 
--- Wider: everything on one row (884 content -> 8 columns).
+-- Wider: 884 content, a row of 872 -> 875 // 140 = 6 columns of
+-- (872 - 5 * 3) // 6 = 142. (Measured from "0" instead of the widest
+-- digit, cells would be 77 + 18 + 3 = 98 at least, and all 7 would fit on one row.)
 window:SetSize(900, 400)
 grid.update(cells(NOW), NOW, 137)
-check("E7 reflowed to one row", cellFor(204).y, 6)
+check("E7 reflowed: 6 columns", cellFor(6).y .. "," .. cellFor(204).x .. "," .. cellFor(204).y, "6,6,27")
+check("E8 cells re-stretched", cellFor(1).w, 142)
 
 ---------------------------------------------------------------- ticking
 local before = #components
@@ -281,8 +301,10 @@ check("J2 window destroyed", windows[2].destroyed, true)
 
 ---------------------------------------------------------------- PrettyUI without _scroll
 -- The card can't be pinned: it goes back into the scrolling content, with
--- the cells under it (6 + 80 + 6 = 92).
+-- the cells under it (6 + 80 + 6 = 92). Text can't be measured either, so
+-- cells are at least 112: 875 // 115 = 7 columns of (872 - 18) // 7 = 122.
 noScrollArea = true
+config = nil
 grid.update(cells(NOW), NOW, 137)
 check("M1 window opened anyway", #windows, 3)
 card = cardParts()
@@ -294,7 +316,8 @@ for _, layer in ipairs(cellsOnScreen()) do
   if layer.parent == windows[3].content and textsOf(layer).content == "w1" then firstCell = layer end
 end
 check("M4 cells under the card", firstCell.y, 92)
--- (The window is still 900 wide from E7, so one row.)
+check("M4b fallback cell width", firstCell.w, 122)
+-- (7 columns, so one row.)
 check("M5 content height includes the card", windows[3].contentHeight, 92 + 21 - 3 + 6)
 grid.destroy()
 

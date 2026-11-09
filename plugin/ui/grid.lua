@@ -22,9 +22,13 @@
         with no re-render. Countdowns show whole minutes, so most cells
         change once a minute. The cells are rebuilt only if the set of
         worlds changes (e.g. a world that isn't in data/worlds.lua appears).
-      - Cells are placed by hand: columns = window width / cell width. When
-        the window is resized, they are moved (not rebuilt). The height is
-        the player's choice: a short window scrolls, a tall one has space.
+      - Cells are placed by hand: as many columns as fit at the narrowest
+        cell width, then the cells are stretched to share out the space
+        left over. The narrowest width is measured from the game's font
+        (see measureCellWidth), so the longest world number and countdown
+        never overlap. When the window is resized, the cells are moved and
+        stretched (not rebuilt). The height is the player's choice: a
+        short window scrolls, a tall one has space.
       - The card stays visible while the cells scroll: see pinCard. The
         window's scroll area (viewport + scrollbar) is moved down by the
         card's height, and the card sits in the space left above it.
@@ -46,10 +50,14 @@ local grid = {}
 -------------------------------------------------------------------------------
 
 -- A cell: [icon] w259  ~1h 18m   (the icon space is kept even when empty)
-local CELL_WIDTH = 98           -- icon + "w259" + "~1h 18m" (72 overlapped "w259" and "1h18m")
+-- Its width is measured (measureCellWidth); this is used only if the game
+-- can't measure text. 98 was too narrow for "w204 ~1h 49m".
+local FALLBACK_CELL_WIDTH = 112
 local CELL_HEIGHT = 18
 local ICON_SIZE = 14            -- a cell's icon
 local NAME_X = 3 + ICON_SIZE + 3 -- the world number starts after the icon slot
+local TEXT_GAP = 6              -- at least this much space between the world number and the countdown
+local CELL_FONT = "MUSEO_SANS_11PT_REGULAR"  -- the cells' font (id.Font for drawing, config.Font for measuring)
 local GAP = 3                   -- between cells
 local PAD = 6                   -- around everything
 
@@ -66,7 +74,7 @@ local STATUS_Y = 25             -- the status line
 local CARD_SPACE = PAD + CARD_HEIGHT    -- the window space the card takes, above the scroll area
 
 local DEFAULT_X, DEFAULT_Y = 60, 80
-local DEFAULT_WIDTH = 934       -- 9 columns: 16 (window edges) + 2 * PAD + 9 * CELL_WIDTH + 8 * GAP
+local DEFAULT_WIDTH = 934       -- about 9 columns (8 or 9, depending on the measured cell width)
 local DEFAULT_HEIGHT = 430     -- 380 before the card, plus room for it
 -- Minimum height: title bar (32) + the card (86) + a scroll area tall
 -- enough for the scrollbar's two arrows and a row of cells (~60) + bottom edge (8).
@@ -113,6 +121,7 @@ local views = {}            -- one table per cell on screen, in world order
 local viewsByWorld = {}     -- viewsByWorld[204] = that view
 local worldsKey = nil       -- the world numbers the cells were built for, as text
 local laidOutWidth = nil    -- content width at the last layout
+local minCellWidth = FALLBACK_CELL_WIDTH  -- the narrowest a cell can be (measureCellWidth)
 local gridTop = PAD         -- y of the first row of cells in the scroll area (see pinCard)
 local selectedWorld = nil   -- the clicked world, or nil
 local lastCells, lastNow, lastTotal = nil, nil, nil   -- the latest update's data
@@ -220,7 +229,7 @@ local function newText(parent, x, y, width, height, alignHorizontal, font)
     local text = prettyui.NewComponent(ui.Text, parent)
     text:SetPos(x, y)
     text:SetSize(width, height)
-    text.font = font or id.Font.MUSEO_SANS_11PT_REGULAR
+    text.font = font or id.Font[CELL_FONT]  -- t[name] is t.name with the name in a variable, as in JS
     text.isShadowed = true
     text.alignHorizontal = alignHorizontal or ui.AlignMode.TOPLEFT
     text.alignVertical = ui.AlignMode.CENTRE
@@ -252,19 +261,25 @@ end
 -- latest data from overview.cells, so the hover text is always fresh.
 local function buildView(cell)
     local view = { world = cell.world, cell = cell }
-    local textWidth = CELL_WIDTH - 6            -- 3 units of margin each side
 
+    -- The width is set by layout (cells stretch to fill the row).
+    -- Everything inside follows it: the rectangles fill the cell, and the
+    -- texts use the anchor trick from buildCard (width = the cell's
+    -- width + a negative number), so a wider cell needs no changes here.
     view.root = prettyui.NewComponent(ui.Layer, window.content)
-    view.root:SetSize(CELL_WIDTH, CELL_HEIGHT)
+    view.root:SetSize(minCellWidth, CELL_HEIGHT)
     view.root.clickthrough = false
     view.background = newRectangle(view.root, true, CELL_BG)
     view.border = newRectangle(view.root, false, BORDER_OTHER)
     -- The icon slot comes first and is always kept, so the world numbers line up down the grid.
     view.icon = icons.new(view.root, 3, 2, ICON_SIZE)
-    view.name = newText(view.root, NAME_X, 1, CELL_WIDTH - NAME_X - 3, CELL_HEIGHT - 2)
+    view.name = newText(view.root, NAME_X, 1, 0, CELL_HEIGHT - 2)
+    view.name:SetSize(-(NAME_X + 3), CELL_HEIGHT - 2, 1.0, 0)  -- to 3 units from the right edge
     view.name.content = "w" .. cell.world
     view.name.rgba = NAME_COLOUR
-    view.timer = newText(view.root, 3, 1, textWidth, CELL_HEIGHT - 2, ui.AlignMode.BOTTOMRIGHT)
+    -- The countdown, on the right (3 units of margin each side).
+    view.timer = newText(view.root, 3, 1, 0, CELL_HEIGHT - 2, ui.AlignMode.BOTTOMRIGHT)
+    view.timer:SetSize(-6, CELL_HEIGHT - 2, 1.0, 0)
 
     -- Tooltip. Giving our own hover handlers lets us also highlight the
     -- cell; then we Show/Hide the tooltip ourselves.
@@ -322,8 +337,54 @@ local function destroyViews()
     viewsByWorld = {}
 end
 
+-- How wide text is in the cells' font, or nil if the game can't say
+-- (config.Font.<name>:GetStringWidth, as PrettyUI uses for its own
+-- buttons; pcall in case it's missing, e.g. in the tests).
+local function textWidth(text)
+    local ok, width = pcall(function()
+        return config.Font[CELL_FONT]:GetStringWidth(text, false)
+    end)
+    if ok and type(width) == "number" then
+        return width
+    end
+    return nil
+end
+
+-- The narrowest a cell can be without its texts overlapping: the icon
+-- slot, the widest world number, a gap, and the widest countdown there
+-- can be. Countdowns look like "~1h 49m", "~29m" or "45s"
+-- (overview.cellCountdown); the longest is "~Xh XXm". Digits aren't all
+-- the same width in this font, so we build that countdown from the
+-- widest digit: no real countdown can be wider. Measured once per set of
+-- worlds (in buildViews).
+local function measureCellWidth(cells)
+    local widestDigit, digitWidth = nil, -1
+    for digit = 0, 9 do
+        local width = textWidth(tostring(digit))
+        if width == nil then
+            return FALLBACK_CELL_WIDTH      -- can't measure: use a safe guess
+        end
+        if width > digitWidth then
+            widestDigit, digitWidth = tostring(digit), width
+        end
+    end
+    local d = widestDigit
+    local timerWidth = textWidth("~" .. d .. "h " .. d .. d .. "m")
+
+    local nameWidth = 0
+    for _, cell in ipairs(cells) do
+        nameWidth = math.max(nameWidth, textWidth("w" .. cell.world) or 0)
+    end
+    if timerWidth == nil or nameWidth == 0 then
+        return FALLBACK_CELL_WIDTH
+    end
+    -- math.ceil rounds up to a whole number (widths may have fractions).
+    return math.ceil(NAME_X + nameWidth + TEXT_GAP + timerWidth + 3)
+end
+
 local function buildViews(cells)
     destroyViews()
+    minCellWidth = measureCellWidth(cells)
     for index, cell in ipairs(cells) do
         local view = buildView(cell)
         views[index] = view
@@ -430,11 +491,17 @@ end
 local function layout()
     local width = contentWidth()
     -- math.floor also turns 10.0 into the integer 10 (Lua 5.4).
-    local columns = math.max(1, math.floor((width - 2 * PAD + GAP) / (CELL_WIDTH + GAP)))
+    local rowWidth = width - 2 * PAD            -- the space for one row of cells
+    -- As many columns as fit at the narrowest width (n cells have n - 1 gaps)...
+    local columns = math.max(1, math.floor((rowWidth + GAP) / (minCellWidth + GAP)))
+    -- ...then share out the whole row between them, so they stretch to
+    -- fill it. (A few units can be left over on the right, from rounding.)
+    local cellWidth = math.max(minCellWidth, math.floor((rowWidth - (columns - 1) * GAP) / columns))
     for index, view in ipairs(views) do
         local column = (index - 1) % columns    -- % is the remainder, like JS
         local row = (index - 1) // columns      -- // divides and rounds down
-        view.root:SetPos(PAD + column * (CELL_WIDTH + GAP), gridTop + row * (CELL_HEIGHT + GAP))
+        view.root:SetPos(PAD + column * (cellWidth + GAP), gridTop + row * (CELL_HEIGHT + GAP))
+        view.root:SetSize(cellWidth, CELL_HEIGHT)
     end
     local rows = (#views + columns - 1) // columns  -- rounds up
     local contentHeight = gridTop + rows * (CELL_HEIGHT + GAP) - GAP + PAD
