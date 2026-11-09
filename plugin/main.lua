@@ -25,6 +25,7 @@
       capture/tracker.lua       - the activity tracker's timer, sent at login
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
       ui/grid.lua               - every world in a floating window (PrettyUI)
+      ui/icons.lua              - status icons (game sprites) and log item icons
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
     Status (in development): dialogue, examine text and tree objects are

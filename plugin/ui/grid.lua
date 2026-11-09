@@ -1,17 +1,22 @@
 --[[
     ui/grid.lua
     -----------
-    The world grid: every world as a small one-line cell ("w104   29m") in a
-    floating, resizable PrettyUI Window over the game. Colour shows what
-    the world is doing; hovering shows everything we know; clicking a cell
-    shows its details at the top of the window. core/overview.lua decides
-    the words (overview.cells); this file only draws them.
+    The world grid: every world as a small one-line cell ("[icon] w104  29m")
+    in a floating, resizable PrettyUI Window over the game. An icon AND a
+    colour show what the world is doing (the icon for colour-blind
+    players; see ui/icons.lua); the countdown is to the tree's death (or its spawn,
+    full growth, or the rewards going); hovering shows everything we know.
+    A card at the top of the window shows the clicked world (or the one
+    you're on) in full. core/overview.lua decides the words
+    (overview.cells); this file only draws them.
 
     How it is drawn (tried out first in the local "grid lab"):
       - Each cell is a few plain game components: a Layer (takes the mouse)
-        holding a background Rectangle, an outline Rectangle and two Texts.
-        137 cells is about 700 components, which builds without a freeze.
-      - Cells are built ONCE and then only changed in place: a countdown
+        holding a background Rectangle, an outline Rectangle, two Sprites
+        (one icon slot: a sprite and an item icon) and two Texts. 137
+        cells is about 1000 components (the grid lab built 700 without a
+        freeze).
+      - Cells (and the card) are built ONCE, then only changed in place: a countdown
         text, a colour. Like setting element.textContent in vanilla JS,
         with no re-render. Countdowns show whole minutes, so most cells
         change once a minute. The cells are rebuilt only if the set of
@@ -28,6 +33,7 @@
 ]]
 
 local overview = require("core/overview")
+local icons = require("ui/icons")
 
 local grid = {}
 
@@ -35,16 +41,29 @@ local grid = {}
 -- Look (sizes in interface units, colours 0xRRGGBBAA)
 -------------------------------------------------------------------------------
 
-local CELL_WIDTH = 84           -- fits "w259" and "1h18m" side by side (72 overlapped)
+-- A cell: [icon] w259  ~1h 18m   (the icon space is kept even when empty)
+local CELL_WIDTH = 98           -- icon + "w259" + "~1h 18m" (72 overlapped "w259" and "1h18m")
 local CELL_HEIGHT = 18
+local ICON_SIZE = 14            -- a cell's icon
+local NAME_X = 3 + ICON_SIZE + 3 -- the world number starts after the icon slot
 local GAP = 3                   -- between cells
 local PAD = 6                   -- around everything
-local LINE_HEIGHT = 16          -- one header line
-local TOP = PAD + 2 * LINE_HEIGHT + 4   -- the grid starts under the two header lines
+
+-- The card (the selected world, at the top). Four lines:
+--   w204                                   [P2P]   (white outline: you're on it)
+--   [icon] Evil willow - 45%               <- status, in the cell's colour
+--   East of the house portal in Rellekka   <- place
+--   Lightning in 4:05  -  Dies in 24:05    <- countdown
+local CARD_HEIGHT = 80
+local CARD_INNER = 8            -- text margin inside the card
+local BADGE_WIDTH, BADGE_HEIGHT = 32, 16
+local CARD_ICON_SIZE = 18
+local STATUS_Y = 25             -- the status line
+local TOP = PAD + CARD_HEIGHT + 6   -- the grid starts under the card
 
 local DEFAULT_X, DEFAULT_Y = 60, 80
-local DEFAULT_WIDTH = 808       -- 9 columns
-local DEFAULT_HEIGHT = 380
+local DEFAULT_WIDTH = 934       -- 9 columns: 16 (window edges) + 2 * PAD + 9 * CELL_WIDTH + 8 * GAP
+local DEFAULT_HEIGHT = 430     -- 380 before the card, plus room for it
 local MIN_WIDTH, MIN_HEIGHT = 200, 120
 
 -- Where a colour is "PrettyUI's", it is copied from PrettyUI v1.3.0's own
@@ -63,8 +82,11 @@ local KIND_COLOURS = {
     dead = 0xD9786FFF,          -- red: rewards left (PrettyUI's chart red, brightened)
 }
 local NAME_COLOUR = 0xE7D7B0FF          -- PrettyUI's body text: every world number
-local HEADER_COLOUR = 0xF2C66DFF        -- PrettyUI's title gold
+local CARD_WORLD_COLOUR = 0xFFFFFFFF    -- the card's big world number
+local BADGE_COLOUR = 0xF2C66DFF         -- PrettyUI's title gold: "P2P" / "F2P"
+local COUNTDOWN_COLOUR = 0xF0A050FF     -- the card's countdown: warm orange
 local PLACE_COLOUR = 0xAFA27FFF
+local CARD_BG = 0x221F1BF5              -- a shade lighter than the cells
 local CELL_BG = 0x171512E8              -- PrettyUI's list background
 local CELL_BG_HOVER = 0x393530F2        -- PrettyUI's hover
 local CELL_BG_SELECTED = 0x4A4640FF     -- PrettyUI's selected
@@ -80,7 +102,7 @@ local BORDER_SELECTED = 0xF2C66DFF      -- the world you clicked
 
 local wantOpen = false      -- the player wants the grid (survives the window closing)
 local window = nil          -- the PrettyUI Window, while it's on screen
-local headerTop, headerBottom = nil, nil    -- the two header Texts
+local card = nil            -- the card's components (see buildCard), while the window is open
 local views = {}            -- one table per cell on screen, in world order
 local viewsByWorld = {}     -- viewsByWorld[204] = that view
 local worldsKey = nil       -- the world numbers the cells were built for, as text
@@ -128,12 +150,14 @@ end
 -- "w204 - Evil willow - 45% | Lightning in 4:05 | West of Falador".
 local function tooltipText(cell, now)
     local parts = { cell.heading }
-    if cell.current then
-        parts[1] = parts[1] .. " (you're here)"
-    end
     local countdown = overview.countdownText(cell, now)
     if countdown ~= nil then
         parts[#parts + 1] = countdown
+    end
+    -- The cell counts to the death, so say when that is too.
+    local death = overview.deathText(cell, now)
+    if death ~= nil then
+        parts[#parts + 1] = death
     end
     if cell.place ~= nil then
         parts[#parts + 1] = cell.place
@@ -183,12 +207,13 @@ local function newRectangle(parent, fill, colour)
 end
 
 -- A one-line Text. alignHorizontal BOTTOMRIGHT puts the text on the right
--- (the game's align modes are shared by both directions).
-local function newText(parent, x, y, width, height, alignHorizontal)
+-- (the game's align modes are shared by both directions). font is
+-- optional: the small 11pt font if left out.
+local function newText(parent, x, y, width, height, alignHorizontal, font)
     local text = prettyui.NewComponent(ui.Text, parent)
     text:SetPos(x, y)
     text:SetSize(width, height)
-    text.font = id.Font.MUSEO_SANS_11PT_REGULAR
+    text.font = font or id.Font.MUSEO_SANS_11PT_REGULAR
     text.isShadowed = true
     text.alignHorizontal = alignHorizontal or ui.AlignMode.TOPLEFT
     text.alignVertical = ui.AlignMode.CENTRE
@@ -227,7 +252,9 @@ local function buildView(cell)
     view.root.clickthrough = false
     view.background = newRectangle(view.root, true, CELL_BG)
     view.border = newRectangle(view.root, false, BORDER_OTHER)
-    view.name = newText(view.root, 3, 1, textWidth, CELL_HEIGHT - 2)
+    -- The icon slot comes first and is always kept, so the world numbers line up down the grid.
+    view.icon = icons.new(view.root, 3, 2, ICON_SIZE)
+    view.name = newText(view.root, NAME_X, 1, CELL_WIDTH - NAME_X - 3, CELL_HEIGHT - 2)
     view.name.content = "w" .. cell.world
     view.name.rgba = NAME_COLOUR
     view.timer = newText(view.root, 3, 1, textWidth, CELL_HEIGHT - 2, ui.AlignMode.BOTTOMRIGHT)
@@ -299,6 +326,52 @@ local function buildViews(cells)
     laidOutWidth = nil          -- place them on the next layout
 end
 
+-- The card: built once when the window opens, then filled in by
+-- updateCard. Two anchor tricks (as in PrettyUI's own widgets):
+--   SetSize(w, h, 1.0, 0)   width = the parent's full width + w, so a
+--                           negative w leaves a margin and it follows resizes
+--   SetPos(x, y, 1.0, 0)    x is measured from the parent's RIGHT edge
+local function buildCard()
+    card = {}
+    card.root = prettyui.NewComponent(ui.Layer, window.content)
+    card.root:SetPos(PAD, PAD)
+    card.root:SetSize(-2 * PAD, CARD_HEIGHT, 1.0, 0)
+    card.root.clickthrough = true       -- the mouse wheel still scrolls the window
+    card.background = newRectangle(card.root, true, CARD_BG)
+    card.border = newRectangle(card.root, false, BORDER_OTHER)
+
+    -- A full-width line of text at height y.
+    local function line(y, height, font)
+        local text = newText(card.root, CARD_INNER, y, 0, height, nil, font)
+        text:SetSize(-2 * CARD_INNER, height, 1.0, 0)
+        return text
+    end
+
+    card.world = line(5, 20, id.Font.MUSEO_SANS_13PT_BOLD)
+    card.world.rgba = CARD_WORLD_COLOUR
+
+    -- Right end of the first line: the P2P badge.
+    local badgeX = -(CARD_INNER + BADGE_WIDTH)
+    card.badgeBorder = prettyui.NewComponent(ui.Rectangle, card.root)
+    card.badgeBorder:SetPos(badgeX, 7, 1.0, 0)
+    card.badgeBorder:SetSize(BADGE_WIDTH, BADGE_HEIGHT)
+    card.badgeBorder.fill = false
+    card.badgeBorder.rgba = BADGE_COLOUR
+    card.badgeBorder.clickthrough = true
+    card.badge = newText(card.root, 0, 7, BADGE_WIDTH, BADGE_HEIGHT, ui.AlignMode.CENTRE)
+    card.badge:SetPos(badgeX, 7, 1.0, 0)
+    card.badge.rgba = BADGE_COLOUR
+
+    -- Status line: the icon, then the text (moved right by updateCard
+    -- when there is an icon).
+    card.statusIcon = icons.new(card.root, CARD_INNER, STATUS_Y, CARD_ICON_SIZE)
+    card.status = line(STATUS_Y, 18, id.Font.MUSEO_SANS_13PT_BOLD)
+    card.place = line(43, 16)
+    card.place.rgba = PLACE_COLOUR
+    card.countdown = line(59, 16)
+    card.countdown.rgba = COUNTDOWN_COLOUR
+end
+
 -------------------------------------------------------------------------------
 -- Layout
 -------------------------------------------------------------------------------
@@ -344,6 +417,7 @@ local function updateView(view, cell, now)
         view.kind = cell.kind
         view.timer.rgba = KIND_COLOURS[cell.kind] or MUTED
     end
+    icons.set(view.icon, cell.icon, cell.logs)     -- only redraws if it changed
     local border = borderColour(cell)
     if border ~= view.borderColour then
         view.border.rgba = border
@@ -352,7 +426,72 @@ local function updateView(view, cell, now)
     refreshBackground(view)
 end
 
--- The header: the clicked world, else the one you're on, else a hint.
+-- The card's outline: white on the world you're on, else P2P gold / F2P
+-- blue, like the cells.
+local function cardBorderColour(cell)
+    if cell.current then return BORDER_CURRENT end
+    if cell.members == true then return BORDER_P2P end
+    if cell.members == false then return BORDER_F2P end
+    return BORDER_OTHER
+end
+
+-- Shows the card's status icon for a cell (nil: none) and moves the
+-- status text to just after it.
+local function setCardIcons(shown)
+    -- "shown and shown.icon" is nil when no world is shown (like shown?.icon in JS).
+    local hasIcon = icons.set(card.statusIcon, shown and shown.icon, shown and shown.logs)
+    local x = CARD_INNER
+    if hasIcon then
+        x = x + CARD_ICON_SIZE + 4
+    end
+    if x ~= card.statusX then
+        card.status:SetPos(x, STATUS_Y)
+        card.status:SetSize(-(x + CARD_INNER), 18, 1.0, 0)  -- the rest of the width
+        card.statusX = x
+    end
+end
+
+-- Fills the card with one cell, or a hint to click one if shown is nil.
+local function updateCard(shown, now)
+    setCardIcons(shown)
+    if shown == nil then
+        card.world.content = ""
+        card.badge.content = ""
+        card.badgeBorder.hidden = true
+        card.status.content = "Click a world for details."
+        card.status.rgba = MUTED
+        card.place.content = ""
+        card.countdown.content = ""
+        card.border.rgba = BORDER_OTHER
+        return
+    end
+
+    card.world.content = "w" .. shown.world
+    -- members is nil for worlds not in data/worlds.lua: no badge.
+    if shown.members == nil then
+        card.badge.content = ""
+        card.badgeBorder.hidden = true
+    else
+        card.badge.content = shown.members and "P2P" or "F2P"
+        card.badgeBorder.hidden = false
+    end
+    card.border.rgba = cardBorderColour(shown)
+
+    card.status.content = shown.noIntel and "Nothing known yet." or (shown.status or "")
+    card.status.rgba = KIND_COLOURS[shown.kind] or MUTED
+    card.place.content = shown.place or ""
+
+    -- "Lightning in 4:05  -  Dies in 24:05": the death time as well, when
+    -- the next event is a strike.
+    local countdown = overview.countdownText(shown, now) or ""
+    local death = overview.deathText(shown, now)
+    if death ~= nil then
+        countdown = countdown .. "  -  " .. death
+    end
+    card.countdown.content = countdown
+end
+
+-- The title, and the card: the clicked world, else the one you're on.
 local function updateHeader(cells, now, total)
     local scouted = 0
     local shown = nil
@@ -374,18 +513,7 @@ local function updateHeader(cells, now, total)
         titleText = title
     end
 
-    if shown == nil then
-        headerTop.content = "Click a world for details."
-        headerBottom.content = ""
-        return
-    end
-    local top = shown.heading .. (shown.current and " (you're here)" or "")
-    local countdown = overview.countdownText(shown, now)
-    if countdown ~= nil then
-        top = top .. "  -  " .. countdown
-    end
-    headerTop.content = top
-    headerBottom.content = shown.place or (shown.noIntel and "Nothing known yet." or "")
+    updateCard(shown, now)
 end
 
 -- Draws the latest data. cells from overview.cells, now the time (or nil),
@@ -412,7 +540,7 @@ end
 -- Forgets the window (after it was closed or destroyed).
 local function forgetWindow()
     window = nil
-    headerTop, headerBottom = nil, nil
+    card = nil
     views, viewsByWorld = {}, {}
     worldsKey, laidOutWidth, titleText = nil, nil, nil
 end
@@ -443,12 +571,7 @@ local function createWindow()
             reportLayout()
         end,
     })
-    headerTop = newText(window.content, PAD, PAD, 300, LINE_HEIGHT)
-    headerTop:SetSize(-2 * PAD, LINE_HEIGHT, 1.0, 0)    -- the window's width minus the padding
-    headerTop.rgba = HEADER_COLOUR
-    headerBottom = newText(window.content, PAD, PAD + LINE_HEIGHT, 300, LINE_HEIGHT)
-    headerBottom:SetSize(-2 * PAD, LINE_HEIGHT, 1.0, 0)
-    headerBottom.rgba = PLACE_COLOUR
+    buildCard()
     return true
 end
 

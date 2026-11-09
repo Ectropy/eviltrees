@@ -19,6 +19,7 @@ local function newComponent(kind, parent)
   function component:SetSize(w, h) self.w, self.h = w, h end
   function component:Subscribe(hook, _, fn) self.hooks[hook] = fn end
   function component:Destroy() self.destroyed = true end
+  function component:SetAssociatedObject(objectID) self.object = objectID end
   components[#components + 1] = component
   return component
 end
@@ -27,7 +28,7 @@ id = { Font = {}, Component = { TOPLEVEL_V2__GAME_AREA = 1 } }
 local gameArea = newComponent("GameArea")
 ui = {
   Interfaces = { GetComponent = function() return gameArea end },
-  Layer = "Layer", Rectangle = "Rectangle", Text = "Text",
+  Layer = "Layer", Rectangle = "Rectangle", Text = "Text", Sprite = "Sprite",
   AlignMode = { TOPLEFT = 1, CENTRE = 2, BOTTOMRIGHT = 3 },
   Hook = { ONCLICK = "click", ONSCROLLWHEEL = "wheel" },
 }
@@ -66,10 +67,11 @@ prettyui = {
 }
 
 -- Helpers to read the "screen".
+-- Cells are the 18-tall Layers (the card is a taller one).
 local function cellsOnScreen()
   local list = {}
   for _, c in ipairs(components) do
-    if c.kind == "Layer" and not c.destroyed then list[#list + 1] = c end
+    if c.kind == "Layer" and c.h == 18 and not c.destroyed then list[#list + 1] = c end
   end
   return list
 end
@@ -79,6 +81,13 @@ local function textsOf(layer)      -- name, timer
     if c.kind == "Text" and c.parent == layer then texts[#texts + 1] = c end
   end
   return texts[1], texts[2]
+end
+local function spritesOf(layer)    -- the icon slot: game sprite, item icon
+  local sprites = {}
+  for _, c in ipairs(components) do
+    if c.kind == "Sprite" and c.parent == layer then sprites[#sprites + 1] = c end
+  end
+  return sprites[1], sprites[2]
 end
 local function borderOf(layer)
   for _, c in ipairs(components) do
@@ -96,12 +105,27 @@ local function cellFor(world)
     if name.content == "w" .. world then return layer end
   end
 end
-local function headerLines()
-  local lines = {}
+-- The card: the Layer straight inside the window that isn't a cell. Its
+-- Texts in the order grid.lua makes them, by name; its outline Rectangle
+-- and the badge's.
+local function cardParts()
+  local layer
   for _, c in ipairs(components) do
-    if c.kind == "Text" and c.parent == windows[#windows].content then lines[#lines + 1] = c.content end
+    if c.kind == "Layer" and c.parent == windows[#windows].content and c.h ~= 18 then layer = c end
   end
-  return lines[1], lines[2]
+  local names = { "world", "badge", "status", "place", "countdown" }
+  local parts, texts, rectangles = {}, 0, {}
+  for _, c in ipairs(components) do
+    if c.parent == layer and c.kind == "Text" then
+      texts = texts + 1
+      parts[names[texts]] = c
+    elseif c.parent == layer and c.kind == "Rectangle" then
+      rectangles[#rectangles + 1] = c
+    end
+  end
+  parts.border, parts.badgeBorder = rectangles[2], rectangles[3]
+  parts.sprite, parts.item = spritesOf(layer)
+  return parts
 end
 
 ---------------------------------------------------------------- data
@@ -148,24 +172,43 @@ check("C5 no intel: name still in body text", name.rgba, 0xE7D7B0FF)
 check("C6 current world outlined white", borderOf(cellFor(204)).rgba, 0xFFFFFFFF)
 check("C7 F2P outline", borderOf(cellFor(3)).rgba, 0x2A6A8AFF)
 
-local top, bottom = headerLines()
-check("D1 header: the world you're on", top, "w204 - Evil willow - 45% (you're here)  -  Lightning in 15:00")
-check("D2 header: place", bottom, "East of the house portal in Rellekka")
+-- An alive tree's cell counts to its death (M + 30), not the next strike.
+check("C8 alive: countdown to death", select(2, textsOf(cellFor(204))).content, "25m")
+
+-- Icons (id.Sprite is missing in these fakes, so the dump's numbers are used).
+local sprite, item = spritesOf(cellFor(204))
+check("C9 alive willow: willow logs only", item.object .. "," .. tostring(item.hidden) .. "," .. tostring(sprite.hidden), "1519,false,true")
+sprite, item = spritesOf(cellFor(2))
+check("C10 spawn: timer sprite", sprite.sprite .. "," .. tostring(sprite.hidden) .. "," .. tostring(item.hidden), "10432,false,true")
+sprite, item = spritesOf(cellFor(1))
+check("C11 no intel: no icon", tostring(sprite.hidden) .. "," .. tostring(item.hidden), "true,true")
 
 -- (45% means strike 1 is done, so the next one is strike 2 at M + 20.)
--- Layout: content 484 wide -> (484 - 12 + 3) // 87 = 5 columns; cells 6 and 7 go on row 2.
-check("E1 first cell", cellFor(1).x .. "," .. cellFor(1).y, "6,42")
-check("E2 seventh cell on row 2", cellFor(204).x .. "," .. cellFor(204).y, "93,63")
--- Two rows: 42 + 2 * 21 - 3 + 6 = 87 tall. The window keeps its height.
-check("E3 content height", window.contentHeight, 87)
+local card = cardParts()
+check("D1 card: world", card.world.content, "w204")
+check("D3 card: beta world has no badge", card.badge.content .. "," .. tostring(card.badgeBorder.hidden), ",true")
+check("D4 card: status", card.status.content, "Evil willow - 45%")
+check("D5 card: status in the alive colour", card.status.rgba, 0x7CC04AFF)
+check("D6 card: place", card.place.content, "East of the house portal in Rellekka")
+check("D7 card: strike, then death", card.countdown.content, "Lightning in 15:00  -  Dies in 25:00")
+check("D8 card: white outline on your world", card.border.rgba, 0xFFFFFFFF)
+check("D9 card: willow logs", card.item.object .. "," .. tostring(card.item.hidden), "1519,false")
+check("D10 card: status after the icon", card.status.x, 8 + 18 + 4)
+
+-- Layout: content 484 wide -> (484 - 12 + 3) // 101 = 4 columns; cells 5 to 7 go on row 2.
+-- The grid starts under the card: 6 + 80 + 6 = 92.
+check("E1 first cell", cellFor(1).x .. "," .. cellFor(1).y, "6,92")
+check("E2 seventh cell on row 2, column 3", cellFor(204).x .. "," .. cellFor(204).y, "208,113")
+-- Two rows: 92 + 2 * 21 - 3 + 6 = 137 tall. The window keeps its height.
+check("E3 content height", window.contentHeight, 137)
 check("E4 window height left alone", window.root.height, 400)
 check("E5 size reported for saving", states[#states].width .. "x" .. states[#states].height, "500x400")
 check("E6 still open in the saved state", states[#states].open, 1)
 
--- Wider: everything on one row.
-window:SetSize(700, 400)
+-- Wider: everything on one row (884 content -> 8 columns).
+window:SetSize(900, 400)
 grid.update(cells(NOW), NOW, 137)
-check("E7 reflowed to one row", cellFor(204).y, 42)
+check("E7 reflowed to one row", cellFor(204).y, 92)
 
 ---------------------------------------------------------------- ticking
 local before = #components
@@ -177,16 +220,27 @@ check("F2 countdown ticks down", select(2, textsOf(cellFor(2))).content, "43m")
 cellFor(2).hooks.click()
 check("G1 clicked: gold outline", borderOf(cellFor(2)).rgba, 0xF2C66DFF)
 check("G1b clicked: selected background", backgroundOf(cellFor(2)).rgba, 0x4A4640FF)
-top = headerLines()
-check("G2 header shows the clicked world", top, "w2 - No tree  -  Spawns in 43:59")
+card = cardParts()
+check("G2 card shows the clicked world", card.world.content, "w2")
+check("G2c P2P badge", card.badge.content .. "," .. tostring(card.badgeBorder.hidden), "P2P,false")
+check("G2d status in the spawn colour", card.status.content .. "," .. string.format("%X", card.status.rgba), "No tree,8FB8DEFF")
+check("G2e countdown", card.countdown.content, "Spawns in 43:59")
+check("G2f P2P outline", card.border.rgba, 0x8A6A2AFF)
+check("G2g timer sprite, item hidden", card.sprite.sprite .. "," .. tostring(card.sprite.hidden) .. "," .. tostring(card.item.hidden), "10432,false,true")
 cellFor(2).hooks.click()
 check("G3 click again: unselected", borderOf(cellFor(2)).rgba, 0x8A6A2AFF)
 check("G4 unselected: plain background", backgroundOf(cellFor(2)).rgba, 0x171512E8)
+check("G4b unselected: card back on your world", cardParts().world.content, "w204")
+cellFor(1).hooks.click()
+card = cardParts()
+check("G5 no intel", card.status.content .. "|" .. card.countdown.content, "Nothing known yet.|")
+check("G5b no intel: no icon, text at the edge", tostring(card.sprite.hidden) .. "," .. tostring(card.item.hidden) .. "," .. card.status.x, "true,true,8")
+cellFor(1).hooks.click()
 
 -- Hover text.
 cellFor(204).tip.handlers.onMouseOver(cellFor(204).tip)
 check("H1 tooltip", cellFor(204).tip.text,
-  "w204 - Evil willow - 45% (you're here) | Lightning in 13:59 | East of the house portal in Rellekka")
+  "w204 - Evil willow - 45% | Lightning in 13:59 | Dies in 23:59 | East of the house portal in Rellekka")
 check("H2 wheel handed to the window", cellFor(204).hooks.wheel, window._onScrollWheel)
 check("H3 hover background", backgroundOf(cellFor(204)).rgba, 0x393530F2)
 cellFor(204).tip.handlers.onMouseLeave(cellFor(204).tip)
@@ -212,6 +266,20 @@ prettyui.Window.new = function() error("no Window in this PrettyUI") end
 grid.update(cells(NOW), NOW, 137)
 check("K1 error logged", string.find(logged[#logged] or "", "[error] grid", 1, true) ~= nil, true)
 check("K2 stops trying", grid.wantsOpen(), false)
+
+---------------------------------------------------------------- which picture (ui/icons.lua)
+local icons = require("ui/icons")
+local function picture(word, treeType)
+  local kind, value = icons.picture(word, treeType)
+  return tostring(kind) .. " " .. tostring(value)
+end
+check("L1 alive, type unknown: woodcutting", picture("tree", nil), "sprite 31215")
+check("L2 alive willow: willow logs", picture("tree", "willow"), "item 1519")
+check("L3 alive plain tree: logs", picture("tree", "tree"), "item 1511")
+check("L4 sapling: oak sapling item", picture("sapling", nil), "item 5370")
+check("L5 dead: skull", picture("dead", "willow"), "sprite 33098")
+check("L6 spawn: timer", picture("timer", nil), "sprite 10432")
+check("L7 nothing", picture(nil, nil), "nil nil")
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
