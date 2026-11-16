@@ -15,6 +15,7 @@
       core/worldstate.lua       - facts + time -> one saved record per world
       core/location.lua         - tile / clue / hint -> where the tree is
       core/overview.lua         - records -> what the dashboard shows
+      core/filters.lua          - the grid's sort and filters
       core/sampledata.lua       - made-up records for trying the grid (debug)
       capture/currentworld.lua  - which world we're on (friends list header)
       capture/dialogue.lua      - Spirit tree / Queen of Sunrise dialogue
@@ -25,7 +26,12 @@
       capture/tracker.lua       - the activity tracker's timer, sent at login
       ui/dashboard.lua          - the dashboard (drawn with PrettyUI)
       ui/grid.lua               - every world in a floating window (PrettyUI)
+      ui/gridtoolbar.lua        - the grid's Sort / Worlds / Info / Tree toolbar
+      ui/treepicker.lua         - the toolbar's Tree button and its tick boxes
       ui/icons.lua              - status icons (game sprites) and log item icons
+      ui/colours.lua            - the colours the grid, card and ribbon page share
+      ui/parts.lua              - a Rectangle and a one-line Text, for cells and the card
+      ui/worldcard.lua          - one world in full: the grid's card and the ribbon page's
       ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
     Status (in development): dialogue, examine text and tree objects are
@@ -76,7 +82,7 @@ local dashboard = require("ui/dashboard")
 local grid = require("ui/grid")
 local debugPanel = require("ui/debugpanel")
 
-local VERSION = "0.5.0-dev"
+local VERSION = "0.7.0-dev"
 local MAX_RECENT = 3            -- how many recent captures the debug panel lists
 local MAX_OTHER_WORLDS = 4      -- how many other worlds' records it lists
 local MS_PER_MINUTE = 60000
@@ -298,7 +304,12 @@ local function refreshPanel()
     local model = overview.build(store.worlds, currentWorld.number, now, worlds.count)
     if usingDashboard() then
         -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
-        dashboard.update(model, now, SHOW_DEBUG and debugLines(model) or nil)
+        -- The world you're on, as the grid would show it (for the card).
+        -- byNumber[nil] is just nil, and "entry and entry.members" is nil
+        -- for a world that isn't in our list (like entry?.members in JS).
+        local entry = worlds.byNumber[currentWorld.number]
+        local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
+        dashboard.update(model, cell, now, SHOW_DEBUG and debugLines(model) or nil)
     else
         debugPanel.show(debugLines(model))
     end
@@ -322,12 +333,18 @@ local function noteChange(changed)
 end
 
 -- The world grid needs PrettyUI too. Reopen it if it was open last time
--- (e.g. before a world hop), and save where the player puts it.
+-- (e.g. before a world hop), with the same sort and filters, and save
+-- where the player puts it and what they pick.
 if prettyui ~= nil then
     grid.restore(store.gridWindow)
+    grid.restoreView(store.gridView)
 end
 grid.setOnLayoutChange(function(state)
     store.gridWindow = state
+    store.markChanged()
+end)
+grid.setOnViewChange(function(state)
+    store.gridView = state
     store.markChanged()
 end)
 
@@ -576,12 +593,14 @@ end)
 -- Each Subscribe takes a name (used to unsubscribe later) and a handler.
 -- safe.handler logs any error instead of losing it.
 
--- 50 times a second: keep the clock ticking, and read dialogue on the frame
--- after each server tick (see capture/dialogue.lua). Once a second: run the timed
--- rules (this also catches up after start-up) and refresh the panel.
+-- 50 times a second: keep the clock ticking, read dialogue on the frame
+-- after each server tick (see capture/dialogue.lua), and let the grid's
+-- toolbar notice a dropdown opening. Once a second: run the timed rules
+-- (this also catches up after start-up) and refresh the panel.
 Event.Logic.Subscribe("evilTrees", safe.handler("Logic", function(event)
     clock.onLogic(event)
     dialogue.onLogic()
+    grid.onLogic()
     if pendingWorld ~= nil and clock.now() ~= nil then
         rememberWorld(pendingWorld)
     end
