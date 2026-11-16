@@ -70,6 +70,16 @@ for _, what in ipairs({ "tile", "clue", "twoHints", "oneHint", "noPlace", "alive
   check("A8 some " .. what, (seen[what] or 0) > 0, true)
 end
 
+-- The game only says health in steps of five, so the made-up ones are too.
+-- (% is the remainder, as in JS.)
+local oddHealth = 0
+for _, record in pairs(sample) do
+  if record.health ~= nil and (record.health % 5 ~= 0 or record.health < 5 or record.health > 100) then
+    oddHealth = oddHealth + 1
+  end
+end
+check("A9 every health is a step of five, 5 to 100", oddHealth, 0)
+
 -- Two hints share a place, so the cell shows fewer places than either hint alone.
 local location = require("core/location")
 local narrowed = 0

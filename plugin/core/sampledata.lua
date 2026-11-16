@@ -17,7 +17,7 @@
                  different hints (fewer places), one hint, or nothing (an
                  activity tracker timer says only "when")
       - type:    known, or not (a sapling or a tree only heard about)
-      - health:  examined (exact), "max 50%" from the tree's look, or unknown
+      - health:  examined (exact), "50% or less" from the tree's look, or unknown
     The records follow worldstate's record shape (see core/worldstate.lua),
     so worldstate.tick moves them along like real ones: timers run out,
     saplings grow, trees get struck and die.
@@ -142,16 +142,18 @@ end
 
 -- Health for a full tree that matured "age" ms ago, consistent with the
 -- strikes so far (M + 10 takes it to 50%, M + 20 to 25%): examined
--- (exact), "max N%" from the tree's look, or unknown.
+-- (exact), "N% or less" from the tree's look, or unknown. The game only
+-- ever says health in steps of five ("approximately 45%"), so an examined
+-- health is a random whole number times 5.
 local function addHealth(record, age, random)
     local roll = random(1, 10)
     if roll <= 5 then
         if age < 10 * MINUTE then
-            record.health = random(51, 100)
+            record.health = random(11, 20) * 5      -- 55 to 100
         elseif age < 20 * MINUTE then
-            record.health = random(26, 50)
+            record.health = random(6, 10) * 5       -- 30 to 50
         else
-            record.health = random(1, 25)
+            record.health = random(1, 5) * 5        -- 5 to 25
         end
         record.healthSource = "examine"
     elseif roll <= 8 and age >= 10 * MINUTE then
