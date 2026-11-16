@@ -15,6 +15,11 @@
                         open: { x, y, width, height, open = 1 or 0 }. (A
                         number, not true/false: we haven't checked how
                         PersistentDB saves booleans.)
+      "gridView"      - the grid's sort and filters, as four strings:
+                        { sort = "soonest", worlds = "all", info = "any",
+                        trees = "yew,magic" } (trees joined by commas, ""
+                        for any tree; plain strings avoid saving an empty
+                        table or a list). ui/grid.lua checks them on load.
 
     Saving is "debounced": changes only mark the data as changed, and
     store.saveIfChanged() (called every few seconds by main.lua) writes it.
@@ -53,6 +58,7 @@ local INT_PREFIX = "int:"
 store.worlds = {}           -- [worldNumber] = record table
 store.lastWorld = nil       -- { number = 205, seenAt = <unix ms> } or nil
 store.gridWindow = nil      -- { x =, y =, width =, height =, open = 1 } or nil
+store.gridView = nil        -- { sort =, worlds =, info =, trees = } (all strings) or nil
 store.lastSavedAt = nil     -- unix ms of the most recent save this session
 store.loadedCount = 0       -- how many world records were loaded at start-up
 
@@ -105,7 +111,7 @@ local function prepareForSave(value)
     return value
 end
 
--- Call after changing store.worlds, store.lastWorld or store.gridWindow.
+-- Call after changing store.worlds, store.lastWorld, store.gridWindow or store.gridView.
 function store.markChanged()
     changed = true
 end
@@ -140,6 +146,7 @@ function store.load()
 
     store.lastWorld = restoreIntegers(safe.try(function() return PersistentDB:GetStructuredData("lastWorld") end))
     store.gridWindow = restoreIntegers(safe.try(function() return PersistentDB:GetStructuredData("gridWindow") end))
+    store.gridView = safe.try(function() return PersistentDB:GetStructuredData("gridView") end)   -- strings only
 
     devlog.print("[store] loaded", store.loadedCount, "world records")
     return store.loadedCount
@@ -169,6 +176,11 @@ function store.saveNow(nowMs)
         if store.gridWindow ~= nil then
             PersistentDB:Delete("gridWindow")
             PersistentDB:SetStructuredData("gridWindow", prepareForSave(store.gridWindow))
+        end
+        -- Last, so a problem with it can't stop the world records being saved.
+        if store.gridView ~= nil then
+            PersistentDB:Delete("gridView")
+            PersistentDB:SetStructuredData("gridView", store.gridView)
         end
     end)
     if not ok then

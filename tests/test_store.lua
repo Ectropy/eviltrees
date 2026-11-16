@@ -41,15 +41,28 @@ store.worlds[204] = {
 }
 store.lastWorld = { number = 205, seenAt = 1793940389123 }
 store.gridWindow = { x = 60, y = 80, width = 762, height = 330, open = 1 }
+store.gridView = { sort = "soonest", worlds = "p2p", info = "needsHint", trees = "yew,magic" }
 store.saveNow(1793940389123)
 check("in-memory record untouched by saving", store.worlds[204].spawnAt, 1793945263552)
 
 store.worlds = {}
 store.lastWorld = nil
 store.gridWindow = nil
+store.gridView = nil
 check("loaded count", store.load(), 1)
 check("grid window kept", store.gridWindow and store.gridWindow.width, 762)
 check("grid window open flag", store.gridWindow and store.gridWindow.open, 1)
+local view = store.gridView or {}
+check("grid view kept", tostring(view.sort) .. "|" .. tostring(view.worlds) .. "|" .. tostring(view.info) .. "|" .. tostring(view.trees),
+  "soonest|p2p|needsHint|yew,magic")
+
+-- Saving again replaces the view (deleted first), and "" (any tree) survives.
+store.gridView = { sort = "world", worlds = "all", info = "any", trees = "" }
+store.saveNow(1793940389123)
+store.gridView = nil
+store.load()
+view = store.gridView or {}
+check("grid view replaced", tostring(view.sort) .. "|" .. tostring(view.trees), "world|")
 local r = store.worlds[204]
 check("spawnAt exact", r.spawnAt, 1793945263552)
 check("spawnEarliest exact", r.spawnEarliest, 1793945232000)
