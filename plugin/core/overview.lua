@@ -15,11 +15,17 @@
     and each row looks like:
         {
             world = 204,
-            heading = "w204 - Evil willow - max 50%",
+            heading = "w204 - Evil willow - 50% or less",
             place = "East of the house portal in Rellekka",   -- or nil
+            places = { "East of the house portal in Rellekka" },  -- the same, one
+                                     -- entry per place: two or three when the
+                                     -- hints leave a choice (place then joins
+                                     -- them with " or "); nil if place is nil
             noIntel = true,          -- only on the current world's row, when
                                      -- we know nothing about it yet
             eventLabel = "Lightning in", eventAt = <Unix ms>, approximate = false,
+            eventSuffix = " or less",   -- after the time (saplings only), or nil
+            eventDue = "Spawning",      -- shown once no time is left, or nil
         }
     The heading and place change rarely; the countdown changes every second,
     so it is made separately by overview.countdownText(row, now).
@@ -37,14 +43,21 @@ local location = require("core/location")
 
 local overview = {}
 
--- worldstate.nextEvent's labels -> the words in front of the countdown.
+-- worldstate.nextEvent's labels -> the words for the countdown:
+--   label   in front of the time: "Spawns in 4m 5s"
+--   suffix  after the time (optional): "Matures in 4m 5s or less". A
+--           sapling can be nurtured by players, which makes it grow up
+--           sooner, so its time is only the latest.
+--   due     shown instead, once no time is left: "Spawning". Left out for
+--           the rewards: that line just goes when they do.
+-- (A table of tables, like { spawns: { label: "Spawns in", ... } } in JS.)
 local EVENT_WORDS = {
-    ["spawns"] = "Spawns in",
-    ["matures by"] = "Full tree in",
-    ["lightning"] = "Lightning in",
-    ["dies by"] = "Dies in",
-    ["dies within"] = "Dies within",    -- only the latest it can die
-    ["gone by"] = "Rewards gone in",
+    ["spawns"] = { label = "Spawns in", due = "Spawning" },
+    ["matures by"] = { label = "Matures in", suffix = " or less", due = "Maturing" },
+    ["lightning"] = { label = "Lightning in", due = "Lightning strike" },
+    ["dies by"] = { label = "Dies in", due = "Dying" },
+    ["dies within"] = { label = "Dies within", due = "Dying" },   -- only the latest it can die
+    ["gone by"] = { label = "Rewards gone in" },
 }
 
 -- "willow" -> "Willow". "^%l" is a lower-case letter at the very start, and
@@ -55,25 +68,42 @@ local function capitalize(text)
     -- returns how many replacements it made.)
 end
 
--- The tree's type and state in a few words: "Evil willow", "Oak sapling",
--- "Dead maple", "No tree". "tree" is the plain (normal) evil tree.
+-- The tree's type and state in a few words:
+--
+--                  type known         type "tree"        type unknown
+--     sapling      "Elder sapling"    "Tree sapling"     "Strange sapling (unknown)"
+--     alive        "Evil willow"      "Evil tree"        "Mature evil tree (unknown)"
+--     dead         "Dead evil willow" "Dead evil tree"   "Dead evil tree (unknown)"
+--
+-- or "No tree". Every one of these is an evil tree; "tree" is also the
+-- name of one TYPE of evil tree (the lowest, named after the ordinary
+-- tree). So "Evil tree" alone always means that type, and a tree whose
+-- type we don't know says "(unknown)". ("Strange sapling" is the game's
+-- own name for a sapling.)
 local function describeTree(record)
-    local treeType = record.treeType
-    if treeType == "tree" then
-        treeType = nil              -- "Evil tree", not "Evil tree tree"
-    end
+    local treeType = record.treeType    -- "tree", "oak", ... or nil
     if record.status == "sapling" then
-        return treeType and (capitalize(treeType) .. " sapling") or "Sapling"
-        -- ("x and a or b" is Lua's x ? a : b.)
+        if treeType == nil then
+            return "Strange sapling (unknown)"
+        end
+        return capitalize(treeType) .. " sapling"
     elseif record.status == "alive" then
-        return "Evil " .. (treeType or "tree")
+        if treeType == nil then
+            return "Mature evil tree (unknown)"
+        end
+        return "Evil " .. treeType
     elseif record.status == "dead" then
-        return "Dead " .. (treeType or "tree")
+        if treeType == nil then
+            return "Dead evil tree (unknown)"
+        elseif treeType == "tree" then
+            return "Dead evil tree"     -- not "Dead tree": that reads like any tree
+        end
+        return "Dead evil " .. treeType
     end
     return "No tree"
 end
 
--- Health as shown: "45%" (examined, exact), or "max 50%" (at most: from the
+-- Health as shown: "45%" (examined, exact), or "50% or less" (from the
 -- tree's look, a strike we saw, or a strike that has certainly happened by
 -- now). nil if unknown.
 local function describeHealth(record)
@@ -87,25 +117,28 @@ local function describeHealth(record)
     end
     -- Not "<=50%": game text reads "<...>" as a markup tag (like <br>),
     -- so a "<" hides the rest of the line.
-    return "max " .. percent
+    return percent .. " or less"
 end
 
 -- Where the tree is (or will be): the exact place if we know it, else the
 -- places the hints leave (see location.forHints), else the newest hint
--- itself. nil if we know nothing.
+-- itself. Returns two values: the text on one line ("A or B"), and the
+-- same as a list with one entry per place ({ "A", "B" }), for the card,
+-- which shows each on its own line. Both nil if we know nothing.
 local function describePlace(record)
     local name = location.forRecord(record)
     if name ~= nil then
-        return name
+        return name, { name }
     end
     local candidates = location.forHints(record)
     if #candidates == 2 or #candidates == 3 then
-        return table.concat(candidates, " or ")     -- like candidates.join(" or ")
+        return table.concat(candidates, " or "), candidates     -- like candidates.join(" or ")
     end
     if record.hint ~= nil then
-        return "Hint: " .. capitalize(record.hint)
+        local hint = "Hint: " .. capitalize(record.hint)
+        return hint, { hint }
     end
-    return nil
+    return nil, nil
 end
 
 -- One world's row. record may be nil (current world, nothing known yet).
@@ -123,39 +156,66 @@ local function buildRow(number, record, now)
         parts[#parts + 1] = health
     end
     row.heading = table.concat(parts, " - ")
-    row.place = describePlace(record)
+    -- Two results into two fields, like [row.place, row.places] = f() in JS.
+    row.place, row.places = describePlace(record)
 
     -- nextEvent returns three values: label, time, approximate.
     local label, at, approximate = worldstate.nextEvent(record, now)
     if label ~= nil then
-        row.eventLabel = EVENT_WORDS[label] or label
+        -- "or {}": an event we have no words for uses its own name, with
+        -- no suffix or due word (words.suffix is then nil).
+        local words = EVENT_WORDS[label] or {}
+        row.eventLabel = words.label or label
+        row.eventSuffix = words.suffix
+        row.eventDue = words.due
         row.eventAt = at
         row.approximate = approximate
     end
     return row
 end
 
--- Milliseconds -> "4:05" (minutes:seconds) or "1:08:12" (hours too).
--- Negative times (the event is due right now) show as "0:00".
+-- Milliseconds -> "1h 23m 30s", "4m 5s" or "45s": the same units as the
+-- grid's cells ("1h 23m", see shortDuration), with the seconds as well.
+-- A part that is zero is left out, so a countdown reads "3m", then
+-- "2m 59s" (never "3m 0s"), and "1h", "1h 5s", "1h 23m". Only when
+-- nothing is left (the event is due right now, or overdue) is it "0s".
 function overview.formatDuration(ms)
     local totalSeconds = math.max(0, ms // 1000)    -- // = whole-number division
     local hours = totalSeconds // 3600
     local minutes = (totalSeconds % 3600) // 60
     local seconds = totalSeconds % 60
+    -- Collect the parts that aren't zero, then join them with spaces
+    -- (like parts.join(" ") in JS). string.format, not "..": a float
+    -- (5.0) would join as "5.0s"; %d prints it as a whole number.
+    local parts = {}
     if hours > 0 then
-        return string.format("%d:%02d:%02d", hours, minutes, seconds)
+        parts[#parts + 1] = string.format("%dh", hours)     -- parts.push(...)
     end
-    return string.format("%d:%02d", minutes, seconds)
+    if minutes > 0 then
+        parts[#parts + 1] = string.format("%dm", minutes)
+    end
+    if seconds > 0 or #parts == 0 then
+        parts[#parts + 1] = string.format("%ds", seconds)
+    end
+    return table.concat(parts, " ")
 end
 
--- The changing part of a row: "Lightning in 4:05", or "Dies in ~12:40"
--- when the time is approximate (could be up to a minute later). nil if
--- nothing is due or the clock isn't running yet.
+-- The changing part of a row: "Lightning in 4m 5s", or "Dies in ~12m 40s"
+-- when the time is approximate (could be up to a minute later), or
+-- "Matures in 1m 14s or less" for a sapling. Once no time is left it is
+-- one word, "Spawning" / "Maturing" / "Dying", never "0s"; for the
+-- rewards it is nil (the line goes). Also nil if nothing is due or the
+-- clock isn't running yet.
 function overview.countdownText(row, now)
     if row.eventAt == nil or now == nil then
         return nil
     end
-    return row.eventLabel .. " " .. (row.approximate and "~" or "") .. overview.formatDuration(row.eventAt - now)
+    local left = row.eventAt - now
+    if left < 1000 then             -- under a second: formatDuration would say "0s"
+        return row.eventDue         -- may be nil
+    end
+    return row.eventLabel .. " " .. (row.approximate and "~" or "") .. overview.formatDuration(left)
+        .. (row.eventSuffix or "")
 end
 
 -- Builds the whole overview. worlds is store.worlds, currentNumber the
@@ -192,8 +252,9 @@ end
 -- The world grid
 -------------------------------------------------------------------------------
 
--- Tree types in a word, for cells.
-local SHORT_TYPES = {
+-- Tree types in a word, for cells. Public so the grid can measure the
+-- widest word a cell may have to show.
+overview.TYPE_WORDS = {
     tree = "Tree", oak = "Oak", willow = "Willow", maple = "Maple",
     yew = "Yew", magic = "Magic", elder = "Elder",
 }
@@ -220,17 +281,31 @@ end
 --   current   true for the world you're on
 --   kind      see cellKind
 --   treeType  "Willow" (or nil)
---   health    "95%" or "max 50%" (alive trees only, or nil)
+--   typeWord  what the cell says about the type: "Willow", for a sapling,
+--             an alive or a dead tree alike (the icon and the colour say
+--             which it is); nil if we don't know the type
+--   health    "95%" or "50% or less" (alive trees only, or nil)
 --   status    "Evil willow - 45%", "Oak sapling", "No tree" (or nil: no intel)
 --   deathAt, deathApproximate
 --             when an alive tree dies (worldstate.deathTime), or nil
 --   cellAt, cellApproximate
 --             what the cell counts down to: the death for an alive tree,
---             else the same as eventAt (spawn, full tree, rewards gone)
+--             else the same as eventAt (spawn, full tree, rewards gone).
+--             Always approximate for a sapling (it may be nurtured).
 --   icon      "timer" | "sapling" | "tree" | "dead", or nil (nothing known
 --             but maybe a hint): see ui/icons.lua
 --   logs      the tree type ("willow", "tree", ...) for an alive tree whose
 --             type we know: its logs are shown instead of the tree icon; else nil
+--   The next four are for the grid's filters and sort (core/filters.lua):
+--   treeKey   only when a tree is up: "sapling" for any sapling, else the
+--             type ("tree", "oak", ... "elder") of an alive or dead tree, or
+--             "unknown" if we don't know its type. nil otherwise.
+--   saplingType  a sapling's type ("elder"), if we know it (the crown and
+--             the helm say); nil otherwise. A tree filter matches it too.
+--   hasHint   true if the record has a hint or an exact place, else false
+--   hasPlace  true if we know the exact place (tile, clue or one-place hint)
+--   healthValue  the health as a number (45, or 50 for "50% or less"), alive
+--             trees only, else nil
 local CELL_ICONS = { spawn = "timer", sapling = "sapling", alive = "tree", dead = "dead" }
 
 local function buildCell(number, members, record, currentNumber, now)
@@ -243,11 +318,31 @@ local function buildCell(number, members, record, currentNumber, now)
         cell.logs = record.treeType
     end
     cell.cellAt, cell.cellApproximate = cell.eventAt, cell.approximate
+    if cell.kind == "sapling" then
+        -- Players can nurture a sapling, which makes it grow up sooner, so
+        -- its time is always an estimate: the cell always gets the "~".
+        cell.cellApproximate = true
+    end
+    cell.hasHint = false
+    cell.hasPlace = false
     if record ~= nil then
-        cell.treeType = SHORT_TYPES[record.treeType]   -- nil if no type (SHORT_TYPES[nil] is nil)
+        -- An exact place counts as a hint too (we don't need to be told one).
+        cell.hasPlace = (location.forRecord(record) ~= nil)
+        cell.hasHint = (record.hint ~= nil) or cell.hasPlace
+        if record.status == "sapling" then
+            cell.treeKey = "sapling"
+            cell.saplingType = record.treeType      -- may be nil
+        elseif record.status == "alive" or record.status == "dead" then
+            cell.treeKey = record.treeType or "unknown"     -- a ?? b in JS
+        end
+        cell.treeType = overview.TYPE_WORDS[record.treeType]  -- nil if no type (TYPE_WORDS[nil] is nil)
+        if cell.treeType ~= nil and cell.treeKey ~= nil then    -- a typed tree is up
+            cell.typeWord = cell.treeType
+        end
         cell.status = describeTree(record)
         if record.status == "alive" then
             cell.health = describeHealth(record)
+            cell.healthValue = record.health        -- a number, or nil
             if cell.health ~= nil then
                 cell.status = cell.status .. " - " .. cell.health
             end
@@ -259,6 +354,17 @@ local function buildCell(number, members, record, currentNumber, now)
         end
     end
     return cell
+end
+
+-- The cell for the world you're on, for the ribbon page's card: the same
+-- cell overview.cells makes for it. members is that world's P2P flag
+-- (true / false, or nil if it isn't in data/worlds.lua). nil while we
+-- don't know which world we're on.
+function overview.currentCell(worlds, currentNumber, members, now)
+    if currentNumber == nil then
+        return nil
+    end
+    return buildCell(currentNumber, members, worlds[currentNumber], currentNumber, now)
 end
 
 -- Milliseconds -> "1h 42m", "1h 5m", "29m", or "45s" in the last minute. Like
@@ -287,14 +393,18 @@ function overview.cellCountdown(cell, now)
     return (cell.cellApproximate and "~" or "") .. overview.shortDuration(cell.cellAt - now)
 end
 
--- "Dies in 14:05" (or "Dies in ~14:05"), for a cell whose next event is
+-- "Dies in 14m 5s" (or "Dies in ~14m 5s"), for a cell whose next event is
 -- a lightning strike, so the death time is shown too. nil otherwise (the
 -- countdown already says when it dies, or it isn't alive).
 function overview.deathText(cell, now)
     if cell.deathAt == nil or now == nil or cell.eventAt == cell.deathAt then
         return nil
     end
-    return "Dies in " .. (cell.deathApproximate and "~" or "") .. overview.formatDuration(cell.deathAt - now)
+    local left = cell.deathAt - now
+    if left < 1000 then
+        return "Dying"              -- no time left: never "Dies in 0s"
+    end
+    return "Dies in " .. (cell.deathApproximate and "~" or "") .. overview.formatDuration(left)
 end
 
 -- Builds every cell, in world-number order. worldList is data/worlds.lua's
