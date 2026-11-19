@@ -118,6 +118,11 @@ check("O1 one view", #views, 1)
 local first = card()
 check("O1b one card, at the top of the page", #cardLayers() .. "," .. first.layer.x .. "," .. first.layer.y .. "," .. first.layer.w .. "," .. first.layer.h, "1,8,8,-16,80")
 check("O1c view under the card", views[1].options.y .. "," .. views[1].options.width .. "," .. views[1].options.height, "94,384,498")
+-- The view has no padding at the sides or top, so its buttons line up
+-- with the card's left edge (both at x = 8).
+local layout = views[1].options.layout
+check("O1d buttons in line with the card", views[1].options.x .. "," .. layout.paddingLeft .. "," .. layout.paddingRight .. "," .. layout.startY,
+  first.layer.x .. ",0,0,0")
 check("O3 scouted count in the button", button("All worlds").component.content, "All worlds (0 / " .. require("data/worlds").count .. ")")
 check("O4 current world on the card", first.world.content, "w204")
 check("O4b sky-blue outline on your world", first.border.rgba, 0x4FC3F7FF)

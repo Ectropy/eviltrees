@@ -8,7 +8,9 @@
       - the world card (ui/worldcard.lua, the same card as at the top of
         the grid): world, status icon and text, place, countdown. The page
         is narrow, so its texts often wrap and the card grows taller.
-      - under it, a PrettyUI SimpleView with the buttons:
+      - under it, a PrettyUI SimpleView with the buttons, lined up with
+        the card's left edge (as the grid's toolbar and cells line up with
+        its card):
           "All worlds (3 / 137)"   opens or closes the grid; the numbers are
                                    how many worlds have intel
           "Clear world"            forgets this world (asks first)
@@ -44,7 +46,11 @@ local dashboard = {}
 dashboard.failed = false
 
 local MARGIN = 8            -- around the card and the view
-local GAP = 6               -- between the card and the view
+local GAP = 6               -- between the card and the view (as the grid's card and toolbar)
+-- The view's own padding: none at the sides or the top, so the buttons
+-- start right under the card's left edge. (PrettyUI's default is 14 at
+-- the sides and 12 at the top, which put them in from the card.)
+local VIEW_LAYOUT = { paddingLeft = 0, paddingRight = 0, startY = 0 }
 
 local parent = nil          -- the ribbon page's component (from ContentLayerReady)
 local card = nil            -- the world card's components, or nil
@@ -186,6 +192,7 @@ local function rebuild(model, cell, debugLines, newSignature)
         y = viewY,
         width = (parent.width or 300) - 2 * MARGIN,
         height = (parent.height or 400) - viewY - MARGIN,
+        layout = VIEW_LAYOUT,
     })
     build(model, cell, debugLines)
     if scrollY > 0 then
