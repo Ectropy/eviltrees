@@ -301,8 +301,10 @@ local function buildCell(number, members, record, currentNumber, now)
     cell.hasHint = false
     cell.hasPlace = false
     if record ~= nil then
-        -- An exact place counts as a hint too (we don't need to be told one).
-        cell.hasPlace = (location.forRecord(record) ~= nil)
+        -- placeExact came from describePlace (in buildRow): true when we
+        -- know the exact place. An exact place counts as a hint too (we
+        -- don't need to be told one).
+        cell.hasPlace = (cell.placeExact == true)
         cell.hasHint = (record.hint ~= nil) or cell.hasPlace
         if record.status == "sapling" then
             cell.treeKey = "sapling"
