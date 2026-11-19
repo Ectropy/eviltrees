@@ -222,8 +222,11 @@ local function debugLines(model)
     local worldText = "unknown"
     if currentWorld.number ~= nil then
         worldText = tostring(currentWorld.number)
-        if worlds.byNumber[currentWorld.number] == nil then
-            worldText = worldText .. " (not in list)"   -- e.g. the beta worlds
+        local entry = worlds.byNumber[currentWorld.number]
+        if entry == nil then
+            worldText = worldText .. " (not in list)"   -- e.g. a world newer than our list
+        elseif entry.beta then
+            worldText = worldText .. " (beta)"
         end
     end
 
@@ -299,12 +302,13 @@ end
 local function refreshPanel()
     local now = clock.now()
     if grid.wantsOpen() then
-        grid.update(overview.cells(gridWorlds(), worlds.list, currentWorld.number, now), now, worlds.count)
+        local shown = gridWorlds()
+        grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now, worlds.total(shown))
     end
     if usingDashboard() and not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
-    local model = overview.build(store.worlds, currentWorld.number, now, worlds.count)
+    local model = overview.build(store.worlds, currentWorld.number, now, worlds.total(store.worlds))
     if usingDashboard() then
         -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
         -- The world you're on, as the grid would show it (for the card).

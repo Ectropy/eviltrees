@@ -232,12 +232,15 @@ local function makeRecord(kind, now, random)
 end
 
 -- Builds the whole made-up table. worldList is data/worlds.lua's list.
+-- Beta worlds are left out: only real records put them on the grid.
 -- random defaults to math.random ("a or b" is like a ?? b in JS).
 function sampledata.generate(worldList, now, random)
     random = random or math.random
     local worlds = {}
     for _, entry in ipairs(worldList) do
-        worlds[entry.number] = makeRecord(pickKind(random), now, random)
+        if not entry.beta then
+            worlds[entry.number] = makeRecord(pickKind(random), now, random)
+        end
     end
     return worlds
 end

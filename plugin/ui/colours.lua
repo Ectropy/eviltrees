@@ -41,7 +41,7 @@ colours.KIND = {
 -- with intel stand out.
 local WORLD_P2P, WORLD_P2P_DIM = 0xE2BD68FF, 0x8A7645FF
 local WORLD_F2P, WORLD_F2P_DIM = 0xFFFFFFFF, 0x8F8F8FFF
-local WORLD_OTHER, WORLD_OTHER_DIM = 0xE7D7B0FF, colours.MUTED  -- not in our list (beta worlds): PrettyUI's body text
+local WORLD_OTHER, WORLD_OTHER_DIM = 0xE7D7B0FF, colours.MUTED  -- not in our list (a new world): PrettyUI's body text
 
 -- The colour for a world number. members is true (P2P), false (F2P) or nil
 -- (a world that isn't in data/worlds.lua). dim is true for a world with no

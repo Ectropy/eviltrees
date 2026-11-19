@@ -1081,8 +1081,8 @@ render = function(cells, now, total)
     updateHeader(cells, now, total)
 
     -- Which cells show, in which order. The toolbar's count ("40 / 137")
-    -- is out of every cell, beta worlds included, so it can be more than
-    -- the title's total.
+    -- is out of every cell, so it can be more than the title's total (a
+    -- beta world you're on with no intel yet, or a world not in our list).
     local visible = filters.apply(cells, activePrefs())
     if not refreshToolbar(#visible, #cells) then
         visible = filters.apply(cells, activePrefs())   -- the toolbar just failed: show every world

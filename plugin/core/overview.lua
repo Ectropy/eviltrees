@@ -279,7 +279,7 @@ end
 -- One world's cell: everything buildRow gives (heading, place, event),
 -- plus:
 --   members   true (P2P) | false (F2P) | nil (not in data/worlds.lua,
---             e.g. the beta worlds)
+--             e.g. a world newer than our list)
 --   current   true for the world you're on
 --   kind      see cellKind
 --   treeType  "Willow" (or nil)
@@ -412,15 +412,19 @@ function overview.deathText(cell, now)
 end
 
 -- Builds every cell, in world-number order. worldList is data/worlds.lua's
--- list. Worlds that aren't in it still get a cell when we're on them or
--- have a record for them (the beta worlds 204/205, or a world added to the
--- game after our list was written).
+-- list. A beta world in it only gets a cell when we have a record for it
+-- or we're on it: it isn't on the live servers, so it would only be in the
+-- way. Worlds that aren't in the list still get a cell when we're on them
+-- or have a record for them (a world added to the game after our list was
+-- written).
 function overview.cells(worlds, worldList, currentNumber, now)
     local cells = {}
     local added = {}            -- added[204] = true once 204 has a cell (a Set in JS)
 
     for _, entry in ipairs(worldList) do
-        cells[#cells + 1] = buildCell(entry.number, entry.members, worlds[entry.number], currentNumber, now)
+        if not entry.beta or worlds[entry.number] ~= nil or entry.number == currentNumber then
+            cells[#cells + 1] = buildCell(entry.number, entry.members, worlds[entry.number], currentNumber, now)
+        end
         added[entry.number] = true
     end
 

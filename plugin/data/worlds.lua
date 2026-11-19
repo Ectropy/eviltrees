@@ -6,6 +6,9 @@
 
     members = true  -> a members (P2P) world
     members = false -> a free-to-play (F2P) world
+    beta = true     -> a beta world: not on the live servers, so the grid
+                       only shows it when we have a record for it (or you
+                       are on it), and it only counts in the total then
 
     To add or remove a world, edit the list below. The lookup table
     byNumber at the bottom is built from it automatically.
@@ -136,6 +139,9 @@ worlds.list = {
     { number = 139, members = true  },
     { number = 140, members = true  },
     { number = 141, members = false },
+    { number = 203, members = false, beta = true },
+    { number = 204, members = true,  beta = true },
+    { number = 205, members = true,  beta = true },
     { number = 210, members = false },
     { number = 215, members = false },
     { number = 225, members = false },
@@ -160,7 +166,25 @@ for _, world in ipairs(worlds.list) do
     worlds.byNumber[world.number] = world
 end
 
--- How many worlds we track; shown as the "/ 137" in "Scouted N / 137" later.
-worlds.count = #worlds.list
+-- How many live (not beta) worlds we track: the "137" in "3 / 137 scouted".
+worlds.count = 0
+for _, world in ipairs(worlds.list) do
+    if not world.beta then
+        worlds.count = worlds.count + 1
+    end
+end
+
+-- The total to show next to the scouted count: the live worlds, plus each
+-- beta world we have a record for (records is store.worlds, or anything
+-- keyed by world number). Then a scouted beta world counts on both sides.
+function worlds.total(records)
+    local total = worlds.count
+    for _, world in ipairs(worlds.list) do
+        if world.beta and records[world.number] ~= nil then
+            total = total + 1
+        end
+    end
+    return total
+end
 
 return worlds

@@ -280,5 +280,36 @@ check("E10 typed sapling matches its type",
   worldsOf(filters.apply(overview.cells(worlds, worldList, 204, NOW), prefs({ trees = { "yew" } }))), "86")
 check("E11 f2p", worldsOf(filters.apply(real, prefs({ worlds = "f2p" }))), "3")
 
+---------------------------------------------------------------- B: beta worlds, with the real world list
+local data = require("data/worlds")
+-- Only the beta worlds' cells, as "203,205".
+local function betaOf(cells)
+  local numbers = {}
+  for _, c in ipairs(cells) do
+    if c.world >= 203 and c.world <= 205 then numbers[#numbers + 1] = c.world end
+  end
+  return table.concat(numbers, ",")
+end
+check("B1 beta worlds are listed with their type",
+  tostring(data.byNumber[203].members) .. "," .. tostring(data.byNumber[204].members) .. ","
+  .. tostring(data.byNumber[205].members) .. "," .. tostring(data.byNumber[205].beta), "false,true,true,true")
+check("B2 no records, not on one: no beta cells", betaOf(overview.cells({}, data.list, 1, NOW)), "")
+check("B3 no records: total is the live worlds", data.total({}), data.count)
+check("B4 live count leaves out the beta worlds", data.count, #data.list - 3)
+
+local betaRecords = {
+  [203] = { status = "none", hint = "close to a Runecrafting altar" },          -- a hint only
+  [205] = { status = "none", spawnAt = NOW + 30 * MINUTE },                     -- a timer
+  [1]   = { status = "none", spawnAt = NOW + 10 * MINUTE },
+}
+local betaCells = overview.cells(betaRecords, data.list, nil, NOW)
+check("B5 beta worlds with a record get a cell", betaOf(betaCells), "203,205")
+check("B6 p2p filter keeps 205", betaOf(filters.apply(betaCells, prefs({ worlds = "p2p" }))), "205")
+check("B7 f2p filter keeps 203", betaOf(filters.apply(betaCells, prefs({ worlds = "f2p" }))), "203")
+check("B8 total counts beta worlds with a record", data.total(betaRecords), data.count + 2)
+check("B9 on a beta world with no intel: it gets a cell",
+  betaOf(overview.cells(betaRecords, data.list, 204, NOW)), "203,204,205")
+check("B10 ...but it isn't in the total", data.total(betaRecords), data.count + 2)
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
