@@ -1,18 +1,11 @@
 --[[
     core/overview.lua
     -----------------
-    Decides what the dashboard shows: which worlds, in which order, and the
-    words for each. Pure: no game API calls, so it can be tested outside the
-    game. ui/dashboard.lua only puts these texts on screen.
+    Decides what the world grid and the world card show: the words for each
+    world. Pure: no game API calls, so it can be tested outside the game.
+    ui/grid.lua and ui/worldcard.lua only put these texts on screen.
 
-    overview.build(...) returns a table like:
-        {
-            scouted = 3,            -- worlds we have intel on
-            total = 137,            -- worlds in data/worlds.lua
-            current = row or nil,   -- the world you're on (nil = not known yet)
-            others = { row, ... },  -- other worlds with intel, soonest event first
-        }
-    and each row looks like:
+    Each world's words start as a "row" (see buildRow), like:
         {
             world = 204,
             heading = "w204 - Evil willow - 50% or less",
@@ -30,9 +23,10 @@
     The heading and place change rarely; the countdown changes every second,
     so it is made separately by overview.countdownText(row, now).
 
-    overview.cells(...) is the same information for the world grid: one
-    small "cell" for EVERY world (with intel or not), in world order. A cell
-    is a row (above) plus a few short fields, see buildCell. Its countdown
+    overview.cells(...) gives one "cell" for EVERY world (with intel or
+    not), in world order, and overview.currentCell(...) the cell for the
+    world you're on. A cell is a row (above) plus a few short fields, see
+    buildCell. Its countdown
     is overview.cellCountdown(cell, now): whole minutes ("29m", "1h 5m")
     until the last minute, then seconds ("45s"), so it changes once a
     minute. For an alive tree it counts to its DEATH, not the next strike.
@@ -221,36 +215,6 @@ function overview.countdownText(row, now)
     end
     return row.eventLabel .. " " .. (row.approximate and "~" or "") .. overview.formatDuration(left)
         .. (row.eventSuffix or "")
-end
-
--- Builds the whole overview. worlds is store.worlds, currentNumber the
--- world you're on (or nil), now the time (Unix ms, or nil), totalWorlds
--- the number of worlds tracked.
-function overview.build(worlds, currentNumber, now, totalWorlds)
-    local result = { scouted = 0, total = totalWorlds, others = {} }
-
-    for number, record in pairs(worlds) do
-        result.scouted = result.scouted + 1
-        if number ~= currentNumber then
-            result.others[#result.others + 1] = buildRow(number, record, now)
-        end
-    end
-
-    -- Soonest event first; worlds with nothing due last; ties by world number.
-    -- table.sort's function returns true when a should come before b
-    -- (JS's sort wants a number instead). math.huge is Infinity.
-    table.sort(result.others, function(a, b)
-        local aAt, bAt = a.eventAt or math.huge, b.eventAt or math.huge
-        if aAt ~= bAt then
-            return aAt < bAt
-        end
-        return a.world < b.world
-    end)
-
-    if currentNumber ~= nil then
-        result.current = buildRow(currentNumber, worlds[currentNumber], now)
-    end
-    return result
 end
 
 -------------------------------------------------------------------------------

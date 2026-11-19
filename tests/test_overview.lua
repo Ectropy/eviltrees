@@ -27,7 +27,7 @@ check("F7 zero parts are left out", overview.formatDuration(60 * MINUTE + 5000) 
   .. "|" .. overview.formatDuration(83 * MINUTE), "1h 5s|1h|1h 23m")
 check("F8 3m, then 2m 59s", overview.formatDuration(3 * MINUTE) .. "|" .. overview.formatDuration(3 * MINUTE - 1000), "3m|2m 59s")
 
----------------------------------------------------------------- B: building
+---------------------------------------------------------------- B: rows
 local worlds = {
   -- Current world: alive willow, examined at 45%, seen at its tile.
   [204] = { status = "alive", treeType = "willow", health = 45, healthSource = "examine",
@@ -46,30 +46,26 @@ local worlds = {
   [3]   = { status = "none", hint = "close to a Runecrafting altar" },
 }
 
-local view = overview.build(worlds, 204, NOW, 137)
-check("B1 scouted", view.scouted, 5)
-check("B2 total", view.total, 137)
-check("B3 others count", #view.others, 4)
+-- One world's row, as the card and the grid get it: currentCell builds the
+-- same row (buildRow) plus the cell's fields.
+local function rowFor(number, record, now)
+  return overview.currentCell({ [number] = record }, number, nil, now)
+end
 
-local current = view.current
+local current = rowFor(204, worlds[204], NOW)
 check("B4 current world", current.world, 204)
 check("B4 heading", current.heading, "w204 - Evil willow - 45%")
 check("B4 place from tile", current.place, "East of the house portal in Rellekka")
 check("B4 next event", current.eventLabel, "Lightning in")
 check("B4 not approximate", current.approximate, false)
 
--- Soonest first: sapling (2 min), dead (6 min), spawn (30 min), then nothing due.
-check("B5 order 1", view.others[1].world, 86)
-check("B5 order 2", view.others[2].world, 12)
-check("B5 order 3", view.others[3].world, 117)
-check("B5 order 4", view.others[4].world, 3)
-
-local sapling, dead, spawning, hintOnly = view.others[1], view.others[2], view.others[3], view.others[4]
+local sapling, dead, spawning, hintOnly =
+  rowFor(86, worlds[86], NOW), rowFor(12, worlds[12], NOW), rowFor(117, worlds[117], NOW), rowFor(3, worlds[3], NOW)
 check("B6 sapling heading", sapling.heading, "w86 - Strange sapling (unknown)")
 check("B6 sapling place", sapling.place, "South of Draynor Village, near the willow trees")
 check("B6 sapling countdown: the latest it matures", overview.countdownText(sapling, NOW), "Matures in 2m or less")
 -- No time left: a word, never "0s". The rewards' line just goes.
-local function dueText(record, at) return tostring(overview.countdownText(overview.build({ [3] = record }, nil, at, 137).others[1], at)) end
+local function dueText(record, at) return tostring(overview.countdownText(rowFor(3, record, at), at)) end
 check("B6b due: maturing", overview.countdownText(sapling, NOW + 2 * MINUTE), "Maturing")
 check("B6c due: spawning (also when overdue)",
   dueText({ status = "none", spawnAt = NOW }, NOW) .. "|" .. dueText({ status = "none", spawnAt = NOW }, NOW + 5000), "Spawning|Spawning")
@@ -93,22 +89,19 @@ check("B9 two-place hint", hintOnly.place,
 
 ---------------------------------------------------------------- C: the current world
 -- No record yet: a row that says so.
-view = overview.build(worlds, 205, NOW, 137)
-check("C1 no intel", view.current.noIntel, true)
-check("C1 heading", view.current.heading, "w205")
-check("C1 all others listed", #view.others, 5)
+local unknown = overview.currentCell(worlds, 205, nil, NOW)
+check("C1 no intel", unknown.noIntel, true)
+check("C1 heading", unknown.heading, "w205")
 
 -- World not known yet (start-up / mid-hop).
-view = overview.build(worlds, nil, NOW, 137)
-check("C2 no current", view.current, nil)
+check("C2 no current", overview.currentCell(worlds, nil, nil, NOW), nil)
 
 -- Clock not running yet: rows still build; no countdowns.
-view = overview.build(worlds, 204, nil, 137)
-check("C3 no clock: no countdown", overview.countdownText(view.current, nil), nil)
+check("C3 no clock: no countdown", overview.countdownText(rowFor(204, worlds[204], nil), nil), nil)
 
 ---------------------------------------------------------------- H: health and type words
 local function heading(record)
-  return overview.build({ [1] = record }, 1, NOW, 137).current.heading
+  return rowFor(1, record, NOW).heading
 end
 local alive = { status = "alive", matureAt = NOW }
 alive.treeType = "tree"
@@ -132,15 +125,15 @@ check("H6d dead: known, tree, unknown",
 
 -- M known to the second: exact (events are exactly M + 10/20/30). M only known within a few minutes: approximate, "~".
 local M = NOW - MINUTE
-local row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M, matureLatest = M } }, 1, NOW, 137).current
+local row = rowFor(1, { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M, matureLatest = M }, NOW)
 check("H7 exact M", overview.countdownText(row, NOW), "Lightning in 9m")
-row = overview.build({ [1] = { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M - 2 * MINUTE, matureLatest = M } }, 1, NOW, 137).current
+row = rowFor(1, { status = "alive", treeType = "yew", matureAt = M, matureEarliest = M - 2 * MINUTE, matureLatest = M }, NOW)
 check("H7b rough M is approximate", overview.countdownText(row, NOW), "Lightning in ~9m")
 
 -- Only told "it's alive" (M somewhere in the last 31 min): no lightning
 -- time, no health, just the latest it can die. (Beta bug 2026-11-06.)
 local guessed = { status = "alive", matureAt = NOW - 15 * MINUTE, matureEarliest = NOW - 31 * MINUTE, matureLatest = NOW }
-row = overview.build({ [1] = guessed }, 1, NOW, 137).current
+row = rowFor(1, guessed, NOW)
 check("H8 rough M: heading", row.heading, "w1 - Mature evil tree (unknown)")
 check("H8 rough M: only an upper bound", overview.countdownText(row, NOW), "Dies within 30m")
 

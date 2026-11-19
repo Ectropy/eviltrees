@@ -124,9 +124,9 @@ end
 -- Everything the view shows, and where it starts (under the card), as one
 -- string (see the header).
 -- ".." joins strings; tostring turns nil/true into "nil"/"true".
-local function signatureOf(model, cell, debugLines)
+local function signatureOf(counts, cell, debugLines)
     local parts = {
-        tostring(cardHeight), tostring(model.scouted), tostring(model.total),
+        tostring(cardHeight), tostring(counts.scouted), tostring(counts.total),
         -- "cell and cell.world" is nil when there is no cell (like cell?.world in JS).
         tostring(cell and cell.world), tostring(cell and cell.noIntel),
     }
@@ -140,7 +140,7 @@ local function signatureOf(model, cell, debugLines)
 end
 
 -- Adds the view's components, top to bottom.
-local function build(model, cell, debugLines)
+local function build(counts, cell, debugLines)
     debugClock = nil
 
     -- Nothing known about this world: say how to find out.
@@ -149,11 +149,11 @@ local function build(model, cell, debugLines)
                        colour = colours.PLACE })
     end
 
-    view:AddSimpleButton("All worlds (" .. model.scouted .. " / " .. model.total .. ")", function()
+    view:AddSimpleButton("All worlds (" .. counts.scouted .. " / " .. counts.total .. ")", function()
         if onToggleGrid ~= nil then
             onToggleGrid()
         end
-    end, { tooltip = "Show or hide the grid of every world. " .. model.scouted .. " of " .. model.total
+    end, { tooltip = "Show or hide the grid of every world. " .. counts.scouted .. " of " .. counts.total
             .. " worlds have intel." })
 
     if cell ~= nil and not cell.noIntel then
@@ -181,8 +181,8 @@ end
 
 -- Destroys the current view (if any) and builds a new one, keeping the
 -- scroll position so a rebuild doesn't jump back to the top.
--- newSignature is signatureOf(model, cell, debugLines), already worked out.
-local function rebuild(model, cell, debugLines, newSignature)
+-- newSignature is signatureOf(counts, cell, debugLines), already worked out.
+local function rebuild(counts, cell, debugLines, newSignature)
     local scrollY = view and view.scrollY or 0
     destroyView()
     local viewY = MARGIN + cardHeight + GAP     -- just under the card
@@ -194,7 +194,7 @@ local function rebuild(model, cell, debugLines, newSignature)
         height = (parent.height or 400) - viewY - MARGIN,
         layout = VIEW_LAYOUT,
     })
-    build(model, cell, debugLines)
+    build(counts, cell, debugLines)
     if scrollY > 0 then
         safe.try(function() view:SetScrollPosition(scrollY) end)
     end
@@ -202,11 +202,11 @@ local function rebuild(model, cell, debugLines, newSignature)
 end
 
 -- Shows the latest data. main.lua calls this about once a second.
---   model       from overview.build (for the scouted count)
+--   counts      { scouted, total }: worlds with a record, and all worlds (main.lua)
 --   cell        from overview.currentCell: the world you're on, or nil
 --   now         the time (Unix ms, or nil)
 --   debugLines  list of strings for the debug section, or nil for none
-function dashboard.update(model, cell, now, debugLines)
+function dashboard.update(counts, cell, now, debugLines)
     if parent == nil then
         return      -- the ribbon page isn't open
     end
@@ -221,9 +221,9 @@ function dashboard.update(model, cell, now, debugLines)
         end
         cardHeight = worldcard.update(card, cell, now, "Finding which world you're on...",
             (parent.width or 300) - 2 * MARGIN)
-        local newSignature = signatureOf(model, cell, debugLines)
+        local newSignature = signatureOf(counts, cell, debugLines)
         if view == nil or newSignature ~= signature then
-            rebuild(model, cell, debugLines, newSignature)
+            rebuild(counts, cell, debugLines, newSignature)
         end
     end)
     if not ok then

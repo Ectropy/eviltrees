@@ -192,20 +192,40 @@ local function describeRecord(record)
     return text
 end
 
--- Lines for the other worlds we have intel on, in the dashboard's order
--- (soonest next event first), e.g.
--- "W204 none | next: spawns 06:07:43 | hint '...'". At most maxLines.
--- otherRows is overview.build's "others" list.
-local function otherWorldLines(otherRows, maxLines)
+-- Lines for the other worlds we have records for, in world-number order,
+-- e.g. "W204 none | next: spawns 06:07:43 | hint '...'". At most maxLines.
+local function otherWorldLines(maxLines)
+    -- The world numbers first, sorted: pairs() walks a table in no
+    -- particular order (unlike a JS object's insertion order).
+    local numbers = {}
+    for number in pairs(store.worlds) do
+        if number ~= currentWorld.number then
+            numbers[#numbers + 1] = number
+        end
+    end
+    table.sort(numbers)
+
     local lines = {}
-    for index, row in ipairs(otherRows) do
+    for index, number in ipairs(numbers) do
         if index > maxLines then
-            lines[#lines + 1] = "  (+" .. (#otherRows - maxLines) .. " more)"
+            lines[#lines + 1] = "  (+" .. (#numbers - maxLines) .. " more)"
             break
         end
-        lines[#lines + 1] = "  W" .. row.world .. " " .. describeRecord(store.worlds[row.world])
+        lines[#lines + 1] = "  W" .. number .. " " .. describeRecord(store.worlds[number])
     end
     return lines
+end
+
+-- How many worlds have a record ("scouted"), and how many worlds there
+-- are, for the "All worlds (n / 137)" button and the debug panel. A world
+-- table has no length (#: its keys are world numbers, not 1, 2, 3...), so
+-- count its keys with pairs.
+local function worldCounts(records)
+    local scouted = 0
+    for _ in pairs(records) do
+        scouted = scouted + 1
+    end
+    return { scouted = scouted, total = worlds.total(records) }
 end
 
 -- Shortens long text so a panel line doesn't get too wide.
@@ -217,9 +237,8 @@ local function shorten(text, maxLength)
 end
 
 -- The debug text: clock, saving, this world's full record, other worlds,
--- recent captures. model is overview.build's result (for the scouted count
--- and the order of the other worlds).
-local function debugLines(model)
+-- recent captures. counts is worldCounts(store.worlds).
+local function debugLines(counts)
     local worldText = "unknown"
     if currentWorld.number ~= nil then
         worldText = tostring(currentWorld.number)
@@ -259,9 +278,9 @@ local function debugLines(model)
             .. "  |  saved " .. savedText,
         "v" .. VERSION .. "  |  prev " .. previousText .. "  |  chat " .. (chat.hasAccess() and "on" or "off"),
         "This world: " .. shorten(describeRecord(store.worlds[currentWorld.number or -1]), 110),
-        "Scouted " .. model.scouted .. " / " .. model.total .. " worlds. Other worlds:",
+        "Scouted " .. counts.scouted .. " / " .. counts.total .. " worlds. Other worlds:",
     }
-    for _, line in ipairs(otherWorldLines(model.others, MAX_OTHER_WORLDS)) do
+    for _, line in ipairs(otherWorldLines(MAX_OTHER_WORLDS)) do
         lines[#lines + 1] = shorten(line, 110)
     end
     lines[#lines + 1] = "Recent (newest first, full log saved):"
@@ -309,31 +328,21 @@ local function refreshPanel()
     if usingDashboard() and not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
-    local model = overview.build(store.worlds, currentWorld.number, now, worlds.total(store.worlds))
     if usingDashboard() then
         -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
-        -- Made before the counts below change, so the debug lines stay real.
-        local lines = SHOW_DEBUG and debugLines(model) or nil
-        if sampleWorlds ~= nil then
-            -- The "All worlds (n / total)" button counts what the grid
-            -- shows, sample included. A world record table has no
-            -- length (#), so count its keys with pairs.
-            local shown = gridWorlds()
-            local scouted = 0
-            for _ in pairs(shown) do
-                scouted = scouted + 1
-            end
-            model.scouted = scouted
-            model.total = worlds.total(shown)
-        end
+        -- The debug lines count the real records only.
+        local lines = SHOW_DEBUG and debugLines(worldCounts(store.worlds)) or nil
+        -- The "All worlds (n / total)" button counts what the grid shows,
+        -- sample included (gridWorlds is store.worlds without a sample).
+        local counts = worldCounts(gridWorlds())
         -- The world you're on, as the grid would show it (for the card).
         -- byNumber[nil] is just nil, and "entry and entry.members" is nil
         -- for a world that isn't in our list (like entry?.members in JS).
         local entry = worlds.byNumber[currentWorld.number]
         local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
-        dashboard.update(model, cell, now, lines)
+        dashboard.update(counts, cell, now, lines)
     else
-        debugPanel.show(debugLines(model))
+        debugPanel.show(debugLines(worldCounts(store.worlds)))
     end
 end
 
