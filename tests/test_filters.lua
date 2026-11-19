@@ -67,6 +67,7 @@ check("D1 default sort", filters.defaults().sort, "world")
 check("D1 default worlds", filters.defaults().worlds, "all")
 check("D1 default info", filters.defaults().info, "any")
 check("D1 default trees empty", #filters.defaults().trees, 0)
+check("D1 default two lines", filters.defaults().lines, "two")
 local d1, d2 = filters.defaults(), filters.defaults()
 d1.trees[1] = "oak"
 d1.sort = "latest"
@@ -120,6 +121,8 @@ check("N4 trees: invalid dropped, duplicates removed, display order",
 check("N5 trees not a table", summary(filters.normalize({ trees = "oak" })), "world|all|any|")
 check("N5 trees nil", summary(filters.normalize({ sort = "latest" })), "latest|all|any|")
 local saved = { sort = "latest", trees = { "oak", "oak" } }
+check("N7 lines kept", filters.normalize({ lines = "one" }).lines, "one")
+check("N7 bad lines: default", filters.normalize({ lines = "three" }).lines .. "," .. filters.normalize({ lines = 1 }).lines, "two,two")
 local normalized = filters.normalize(saved)
 check("N6 returns a new table", normalized ~= saved, true)
 check("N6 new trees list", normalized.trees ~= saved.trees, true)

@@ -10,8 +10,11 @@
     hasPlace, healthValue, saplingType (all described above buildCell in core/overview.lua).
 
     The user's choices ("prefs") are a table like:
-        { sort = "soonest", worlds = "p2p", info = "any", trees = { "yew", "magic" } }
-    sort / worlds / info are one id from the lists below. trees is a list of
+        { sort = "soonest", worlds = "p2p", info = "any", trees = { "yew", "magic" },
+          lines = "two" }
+    sort / worlds / info / lines are one id from the lists below. lines is
+    not a filter: it says how the cells are drawn (one or two lines each),
+    and is kept here so it is saved and checked with the rest. trees is a list of
     tree keys; an empty list means any tree. Prefs get saved, so always run
     saved data through filters.normalize before using it.
 
@@ -54,6 +57,14 @@ filters.INFOS = {
 -- They help scouts who share intel; playing alone, the useful ones are
 -- those that say which world is worth a visit. Left out on 2026-11-09.)
 
+-- How the cells are drawn: "two" adds the health and the place on a
+-- second line (see ui/grid.lua). Not a filter: it hides nothing. Chosen on
+-- the grid's settings page (ui/gridsettings.lua).
+filters.LINES = {
+    { id = "two", label = "Two lines" },
+    { id = "one", label = "One line" },
+}
+
 -- Tree keys are the cell's treeKey: see overview.lua.
 filters.TREES = {
     { id = "unknown", label = "Unknown" },
@@ -75,7 +86,7 @@ filters.TREES = {
 -- change made through one variable would show up in all of them, as with
 -- a shared object in JS. So there is no shared DEFAULTS table.)
 function filters.defaults()
-    return { sort = "world", worlds = "all", info = "any", trees = {} }
+    return { sort = "world", worlds = "all", info = "any", trees = {}, lines = "two" }
 end
 
 -- true if id is one of the entries' ids. ipairs walks an array in order,
@@ -109,6 +120,7 @@ function filters.normalize(saved)
     prefs.sort = validId(filters.SORTS, saved.sort, prefs.sort)
     prefs.worlds = validId(filters.WORLDS, saved.worlds, prefs.worlds)
     prefs.info = validId(filters.INFOS, saved.info, prefs.info)
+    prefs.lines = validId(filters.LINES, saved.lines, prefs.lines)
 
     if type(saved.trees) == "table" then
         -- First a set of what was saved: chosen["yew"] = true. A set makes
@@ -128,7 +140,7 @@ function filters.normalize(saved)
 end
 
 -- true when the worlds, info or tree choice is not the default, so some
--- worlds may be hidden. (The sort never hides anything.)
+-- worlds may be hidden. (The sort and lines never hide anything.)
 function filters.isFiltering(prefs)
     return prefs.worlds ~= "all" or prefs.info ~= "any" or #prefs.trees > 0
 end

@@ -15,9 +15,9 @@
                         open: { x, y, width, height, open = 1 or 0 }. (A
                         number, not true/false: we haven't checked how
                         PersistentDB saves booleans.)
-      "gridView"      - the grid's sort and filters, as four strings:
+      "gridView"      - the grid's sort, filters and lines, as five strings:
                         { sort = "soonest", worlds = "all", info = "any",
-                        trees = "yew,magic" } (trees joined by commas, ""
+                        trees = "yew,magic", lines = "two" } (trees joined by commas, ""
                         for any tree; plain strings avoid saving an empty
                         table or a list). ui/grid.lua checks them on load.
 
@@ -58,7 +58,7 @@ local INT_PREFIX = "int:"
 store.worlds = {}           -- [worldNumber] = record table
 store.lastWorld = nil       -- { number = 205, seenAt = <unix ms> } or nil
 store.gridWindow = nil      -- { x =, y =, width =, height =, open = 1 } or nil
-store.gridView = nil        -- { sort =, worlds =, info =, trees = } (all strings) or nil
+store.gridView = nil        -- { sort =, worlds =, info =, trees =, lines = } (all strings) or nil
 store.lastSavedAt = nil     -- unix ms of the most recent save this session
 store.loadedCount = 0       -- how many world records were loaded at start-up
 

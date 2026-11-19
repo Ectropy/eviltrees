@@ -77,6 +77,7 @@ check("B6d the last second still counts", dueText({ status = "none", spawnAt = N
 
 check("B7 dead heading", dead.heading, "w12 - Dead evil oak")
 check("B7 dead place: hint", dead.place, "Hint: Close to a large collection of willow trees")
+check("B7b a cell's place: the hint alone", dead.cellPlace, "Close to a large collection of willow trees")
 check("B7 dead countdown", overview.countdownText(dead, NOW), "Rewards gone in 5m 6s")
 check("B7b rewards gone: the line goes", overview.countdownText(dead, NOW + 6 * MINUTE), nil)
 

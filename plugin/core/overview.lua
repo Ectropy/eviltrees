@@ -122,21 +122,23 @@ end
 
 -- Where the tree is (or will be): the exact place if we know it, else the
 -- places the hints leave (see location.forHints), else the newest hint
--- itself. Returns two values: the text on one line ("A or B"), and the
+-- itself. Returns three values: the text on one line ("A or B"), the
 -- same as a list with one entry per place ({ "A", "B" }), for the card,
--- which shows each on its own line. Both nil if we know nothing.
+-- which shows each on its own line, and a short form for a grid cell (the
+-- same text, but a hint without "Hint: "). All nil if we know nothing.
 local function describePlace(record)
     local name = location.forRecord(record)
     if name ~= nil then
-        return name, { name }
+        return name, { name }, name
     end
     local candidates = location.forHints(record)
     if #candidates == 2 or #candidates == 3 then
-        return table.concat(candidates, " or "), candidates     -- like candidates.join(" or ")
+        local joined = table.concat(candidates, " or ")     -- like candidates.join(" or ")
+        return joined, candidates, joined
     end
     if record.hint ~= nil then
-        local hint = "Hint: " .. capitalize(record.hint)
-        return hint, { hint }
+        local hint = capitalize(record.hint)
+        return "Hint: " .. hint, { "Hint: " .. hint }, hint
     end
     return nil, nil
 end
@@ -157,7 +159,7 @@ local function buildRow(number, record, now)
     end
     row.heading = table.concat(parts, " - ")
     -- Two results into two fields, like [row.place, row.places] = f() in JS.
-    row.place, row.places = describePlace(record)
+    row.place, row.places, row.cellPlace = describePlace(record)
 
     -- nextEvent returns three values: label, time, approximate.
     local label, at, approximate = worldstate.nextEvent(record, now)
@@ -285,6 +287,8 @@ end
 --             an alive or a dead tree alike (the icon and the colour say
 --             which it is); nil if we don't know the type
 --   health    "95%" or "50% or less" (alive trees only, or nil)
+--   cellPlace the place for a two-line cell: as place, but a hint without
+--             "Hint: " (no room to spare); nil if place is nil
 --   status    "Evil willow - 45%", "Oak sapling", "No tree" (or nil: no intel)
 --   deathAt, deathApproximate
 --             when an alive tree dies (worldstate.deathTime), or nil
