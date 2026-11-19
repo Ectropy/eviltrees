@@ -1,8 +1,13 @@
 --[[
     ui/grid.lua
     -----------
-    The world grid: every world as a small one-line cell ("[icon] w104  29m")
-    in a floating, resizable PrettyUI Window over the game. An icon AND a
+    The world grid: every world as a small cell in a floating, resizable
+    PrettyUI Window over the game. A cell has one line ("[icon] w104  29m")
+    or, by default, two (switched in the settings, ui/gridsettings.lua:
+    the gear in the title bar, or the client's Settings icon):
+        [icon] w104 Elder 45%   29m      <- line 1, plus the health
+        West of Falador                  <- the place, cut off with "..."
+    The health is just the number, also for "50% or less". An icon AND a
     colour show what the world is doing (the icon for colour-blind
     players; see ui/icons.lua); the countdown is to the tree's death (or its spawn,
     full growth, or the rewards going); hovering shows everything we know.
@@ -24,8 +29,11 @@
       - Each cell is a few plain game components: a Layer (takes the mouse)
         holding a background Rectangle, an outline Rectangle, two Sprites
         (one icon slot: a sprite and an item icon) and three Texts (world
-        number, tree type, countdown). 137 cells is about 1100 components (the grid lab built 700 without a
-        freeze).
+        number, tree type, countdown); two-line cells add two more (health,
+        place). 137 cells is about 1100 components, or 1370 with two lines
+        (the grid lab built 822 without a freeze; 1370 is not yet tried in
+        the beta). Switching lines rebuilds
+        the cells.
       - Cells (and the card) are built ONCE, then only changed in place: a countdown
         text, a colour. Like setting element.textContent in vanilla JS,
         with no re-render. Countdowns show whole minutes, so most cells
@@ -69,6 +77,7 @@ local icons = require("ui/icons")
 local parts = require("ui/parts")
 local worldcard = require("ui/worldcard")
 local gridtoolbar = require("ui/gridtoolbar")
+local gridsettings = require("ui/gridsettings")
 
 local grid = {}
 
@@ -77,12 +86,23 @@ local grid = {}
 -------------------------------------------------------------------------------
 
 -- A cell: [icon] w259 Willow  ~1h 18m   (the icon space is kept even when empty)
+-- Two lines:  [icon] w259 Willow 45%  ~1h 18m
+--             West of Falador
 -- Its width is measured (measureCells); these are used only if the game
 -- can't measure text. 98 was too narrow for "w204 ~1h 49m".
 local FALLBACK_CELL_WIDTH = 112     -- without a tree type
 local FALLBACK_NAME_WIDTH = 30      -- "w259"
 local FALLBACK_TYPE_WIDTH = 40      -- "Willow"
-local CELL_HEIGHT = 18
+local CELL_HEIGHT = 18             -- a one-line cell
+local TWO_LINE_HEIGHT = 34         -- a two-line cell
+local PLACE_Y = 17                 -- two lines: where the second line starts
+local PLACE_HEIGHT = 15            -- two lines: the second line's height
+-- Two lines: the narrowest cell still shows this much of a place on its
+-- second line. A made-up short place name (short forms aren't written
+-- yet); real names are often longer and are cut off with "...".
+local PLACE_SAMPLE = "S. Tree Gnome Stronghold"
+local FALLBACK_HEALTH_WIDTH = 26   -- "100%"
+local FALLBACK_SAMPLE_WIDTH = 140
 local ICON_SIZE = 14            -- a cell's icon
 local NAME_X = 3 + ICON_SIZE + 3 -- the world number starts after the icon slot
 local TEXT_GAP = 6              -- at least this much space between the world number and the countdown
@@ -102,7 +122,7 @@ local LINK_GAP = 4              -- between the notice's text and its link
 local LINK_TEXT = "remove filters."
 
 local DEFAULT_X, DEFAULT_Y = 60, 80
-local DEFAULT_WIDTH = 934       -- about 9 columns (8 or 9, depending on the measured cell width)
+local DEFAULT_WIDTH = 934       -- about 9 one-line columns, or 4 two-line ones (depends on the measured widths)
 local DEFAULT_HEIGHT = 430     -- 380 before the card, plus room for it
 -- Minimum height: title bar (32) + the card (86) + a scroll area tall
 -- enough for the scrollbar's two arrows and a row of cells (~64) + bottom
@@ -134,7 +154,11 @@ local visibleKey = nil      -- the shown cells' world numbers, in order, at the 
 -- Text widths, measured once per set of worlds (measureCells): base is the
 -- narrowest a cell can be without a tree type, name the widest world
 -- number, type the widest tree type word there can be ("Willow").
-local sizes = { base = FALLBACK_CELL_WIDTH, name = FALLBACK_NAME_WIDTH, type = FALLBACK_TYPE_WIDTH }
+-- Two lines also need health (the widest health, "100%") and sample (PLACE_SAMPLE).
+local sizes = { base = FALLBACK_CELL_WIDTH, name = FALLBACK_NAME_WIDTH, type = FALLBACK_TYPE_WIDTH,
+    health = FALLBACK_HEALTH_WIDTH, sample = FALLBACK_SAMPLE_WIDTH }
+local twoLines = true       -- the cells on screen have two lines (set when they are built)
+local cellHeight = TWO_LINE_HEIGHT  -- and so are this tall
 local typeWidth = 0         -- the widest tree type text on show now (0: none, cells are then narrower)
 local wordWidths = {}       -- wordWidths["Elder"] = its measured width, worked out once per word
 local minCellWidth = FALLBACK_CELL_WIDTH  -- the narrowest a cell can be now
@@ -142,6 +166,7 @@ local gridTop = PAD         -- y of the first row of cells in the scroll area (s
 local pin = nil             -- where PrettyUI put the scroll area, { left, top }, or nil if it can't be moved
 local notice = nil          -- the filter notice's parts (buildNotice), while the window is open
 local hasToolbar = false    -- true while the toolbar is on screen and working
+local hasSettings = false   -- true while the settings gear and page are on the window
 local toolbarHeight = 0     -- its rows' height at the last refresh
 local cardHeight = worldcard.MIN_HEIGHT     -- the card's height now (it grows when its texts wrap)
 local selectedWorld = nil   -- the clicked world, or nil
@@ -190,7 +215,7 @@ end
 -- The sort and filters
 -------------------------------------------------------------------------------
 
--- The prefs as they are saved: four strings, with the trees joined by
+-- The prefs as they are saved: five strings, with the trees joined by
 -- commas ("yew,magic", or "" for any tree). Plain strings avoid saving an
 -- empty table or a list through PersistentDB.
 local function savedForm(chosen)
@@ -199,11 +224,12 @@ local function savedForm(chosen)
         worlds = chosen.worlds,
         info = chosen.info,
         trees = table.concat(chosen.trees, ","),    -- trees.join(",")
+        lines = chosen.lines,
     }
 end
 
 local function viewKey(state)
-    return state.sort .. "|" .. state.worlds .. "|" .. state.info .. "|" .. state.trees
+    return state.sort .. "|" .. state.worlds .. "|" .. state.info .. "|" .. state.trees .. "|" .. state.lines
 end
 
 -- Passes the prefs to main.lua (to save), but only when they changed.
@@ -324,6 +350,16 @@ local function onCellClick(world)
     redraw("click")
 end
 
+-- Two lines: where the health starts. After the widest world number, and
+-- after the tree type column while one is shown (typeWidth > 0).
+local function healthX()
+    local x = NAME_X + sizes.name + TEXT_GAP
+    if typeWidth > 0 then
+        x = x + typeWidth + TEXT_GAP
+    end
+    return x
+end
+
 -- One cell's components. view.cell is updated every second with the
 -- latest data from overview.cells, so the hover text is always fresh.
 local function buildView(cell)
@@ -333,8 +369,8 @@ local function buildView(cell)
     -- Everything inside follows it: the rectangles fill the cell, and the
     -- texts use the anchor trick from buildCard (width = the cell's
     -- width + a negative number), so a wider cell needs no changes here.
-    view.root = prettyui.NewComponent(ui.Layer, window.content)
-    view.root:SetSize(minCellWidth, CELL_HEIGHT)
+    view.root = parts.new(ui.Layer, window.content)
+    view.root:SetSize(minCellWidth, cellHeight)
     view.root.clickthrough = false
     view.background = parts.rectangle(view.root, true, CELL_BG)
     view.border = parts.rectangle(view.root, false, colours.FRAME)
@@ -350,6 +386,17 @@ local function buildView(cell)
     -- line up down the grid like a table column. Its box fits the widest
     -- type there can be. Empty until a type is known.
     view.type = parts.text(view.root, NAME_X + sizes.name + TEXT_GAP, 1, sizes.type + 2, CELL_HEIGHT - 2)
+    if twoLines then
+        -- The health ("45%"), after the tree type, so healths line up down
+        -- the grid too. setTypeWidth moves it when the type column changes.
+        view.health = parts.text(view.root, healthX(), 1, sizes.health + 2, CELL_HEIGHT - 2)
+        view.health.rgba = colours.PLACE
+        -- The second line: the place, across the whole cell (from under
+        -- the icon, for more room).
+        view.place = parts.text(view.root, 3, PLACE_Y, 0, PLACE_HEIGHT)
+        view.place:SetSize(-6, PLACE_HEIGHT, 1.0, 0)
+        view.place.rgba = colours.PLACE
+    end
 
     -- Tooltip. Giving our own hover handlers lets us also highlight the
     -- cell; then we Show/Hide the tooltip ourselves.
@@ -400,8 +447,13 @@ local function keyOf(cells)
 end
 
 -- Removes all cells (when the set of worlds changes).
+-- Each cell's tooltip goes too: once shown, PrettyUI keeps its parts on
+-- window.content and a reference in the window's list of tooltips, so
+-- removing only the cell would leave them behind (switching lines rebuilds
+-- every cell).
 local function destroyViews()
     for _, view in ipairs(views) do
+        pcall(function() view.tooltip:Destroy() end)
         pcall(function() view.root:Destroy() end)
     end
     views = {}
@@ -429,8 +481,11 @@ end
 -- the same width in this font, so we build that countdown from the
 -- widest digit: no real countdown can be wider. Returns the fallbacks if
 -- the game can't measure. Called once per set of worlds (in buildViews).
+-- Two-line cells also need the widest health and the sample place (see
+-- setTypeWidth).
 local function measureCells(cells)
-    local fallback = { base = FALLBACK_CELL_WIDTH, name = FALLBACK_NAME_WIDTH, type = FALLBACK_TYPE_WIDTH }
+    local fallback = { base = FALLBACK_CELL_WIDTH, name = FALLBACK_NAME_WIDTH, type = FALLBACK_TYPE_WIDTH,
+        health = FALLBACK_HEALTH_WIDTH, sample = FALLBACK_SAMPLE_WIDTH }
 
     local widestDigit, digitWidth = nil, -1
     for digit = 0, 9 do
@@ -455,7 +510,10 @@ local function measureCells(cells)
     for _, word in pairs(overview.TYPE_WORDS) do
         widestType = math.max(widestType, textWidth(word) or 0)
     end
-    if timerWidth == nil or nameWidth == 0 or widestType == 0 then
+    -- Two lines: the widest health ("100%"), and the sample place.
+    local healthWidth = textWidth("100%")
+    local sampleWidth = textWidth(PLACE_SAMPLE)
+    if timerWidth == nil or nameWidth == 0 or widestType == 0 or healthWidth == nil or sampleWidth == nil then
         return fallback
     end
     -- math.ceil rounds up to a whole number (widths may have fractions).
@@ -463,6 +521,8 @@ local function measureCells(cells)
         base = math.ceil(NAME_X + nameWidth + TEXT_GAP + timerWidth + 3),
         name = math.ceil(nameWidth),
         type = math.ceil(widestType),
+        health = math.ceil(healthWidth),
+        sample = math.ceil(sampleWidth),
     }
 end
 
@@ -477,15 +537,28 @@ local function wordWidth(word)
 end
 
 -- Sets the narrowest cell width for the widest tree type on show (0: no
--- type is shown). A type needs its text and one more gap.
+-- type is shown). A type needs its text and one more gap. Two-line cells
+-- also fit the health on line 1 and the sample place on line 2: the
+-- wider line sets the width. The health moves with the type column.
 local function setTypeWidth(width)
     typeWidth = width
     minCellWidth = sizes.base + (width > 0 and (width + TEXT_GAP) or 0)
+    if twoLines then
+        local line1 = minCellWidth + sizes.health + TEXT_GAP
+        local line2 = 3 + sizes.sample + 3      -- 3 units of margin each side
+        minCellWidth = math.max(line1, line2)
+        local x = healthX()
+        for _, view in ipairs(views) do
+            view.health:SetPos(x, 1)
+        end
+    end
     laidOutWidth = nil          -- place the cells again on the next layout
 end
 
 local function buildViews(cells)
     destroyViews()
+    twoLines = (prefs.lines == "two")
+    cellHeight = twoLines and TWO_LINE_HEIGHT or CELL_HEIGHT
     sizes = measureCells(cells)
     wordWidths = {}             -- measured again with the new sizes
     setTypeWidth(typeWidth)
@@ -598,7 +671,7 @@ local function buildNotice()
 
     -- "or": if the game can't measure text, guess 6 per letter.
     notice.linkWidth = math.ceil(textWidth(LINK_TEXT) or #LINK_TEXT * 6) + 2
-    notice.link = prettyui.NewComponent(ui.Layer, window.content)
+    notice.link = parts.new(ui.Layer, window.content)
     notice.link:SetSize(notice.linkWidth, NOTICE_HEIGHT)
     notice.link.clickthrough = false
     notice.link.hidden = true
@@ -718,8 +791,8 @@ local function layout(visible)
         shown[view] = true      -- a table can be a key, like a Map in JS
         local column = (index - 1) % columns    -- % is the remainder, like JS
         local row = (index - 1) // columns      -- // divides and rounds down
-        view.root:SetPos(PAD + column * (cellWidth + GAP), gridTop + row * (CELL_HEIGHT + GAP))
-        view.root:SetSize(cellWidth, CELL_HEIGHT)
+        view.root:SetPos(PAD + column * (cellWidth + GAP), gridTop + row * (cellHeight + GAP))
+        view.root:SetSize(cellWidth, cellHeight)
         if view.root.hidden then
             view.root.hidden = false
         end
@@ -734,7 +807,7 @@ local function layout(visible)
     local rows = (#visible + columns - 1) // columns    -- rounds up
     local bottom = gridTop
     if rows > 0 then
-        bottom = gridTop + rows * (CELL_HEIGHT + GAP) - GAP
+        bottom = gridTop + rows * (cellHeight + GAP) - GAP
     end
     -- While filtering, say so under the cells (in the scrolling content).
     if filters.isFiltering(activePrefs()) then
@@ -776,22 +849,28 @@ local function viewChanged()
     redraw("toolbar")
 end
 
--- The toolbar's onChange: group is "sort", "worlds", "info" or "trees".
+-- The toolbar's onChange: group is "sort", "worlds", "info", "trees" or "lines".
 local function setPref(group, value)
     -- A copy with one field changed (like { ...prefs, [group]: value } in
     -- JS), made valid by filters.normalize (unknown values fall back).
-    local changed = { sort = prefs.sort, worlds = prefs.worlds, info = prefs.info, trees = prefs.trees }
+    local changed = { sort = prefs.sort, worlds = prefs.worlds, info = prefs.info, trees = prefs.trees,
+        lines = prefs.lines }
     changed[group] = value
     prefs = filters.normalize(changed)
+    if group == "lines" then
+        worldsKey = nil         -- one line or two: the cells are built again
+        pcall(gridsettings.showLines, prefs.lines)  -- both settings pages show the new choice
+    end
     viewChanged()
 end
 
 -- Reset, and the notice's "remove filters." link: clears Worlds, Info and
--- Tree. The sort is never reset. (Assigned to the local declared above
+-- Tree. The sort and lines are never reset. (Assigned to the local declared above
 -- buildNotice.)
 resetFilters = function()
     local cleared = filters.defaults()
     cleared.sort = prefs.sort
+    cleared.lines = prefs.lines
     prefs = cleared
     if hasToolbar then
         local ok, err = pcall(gridtoolbar.showPrefs, prefs)
@@ -841,6 +920,39 @@ local function refreshToolbar(shown, total)
     return true
 end
 
+-- The settings gear in the title bar and its page (ui/gridsettings.lua).
+-- If they fail, the grid goes on without them (the client's Settings icon
+-- still has the same choices).
+local function attachSettings()
+    -- Where the window's inside starts: found with the scroll area, else
+    -- PrettyUI's border (8) and title bar (32).
+    local left, top = 8, 32
+    if pin ~= nil then
+        left, top = pin.left, pin.top
+    end
+    local ok, err = pcall(gridsettings.attach, window, left, top, {
+        lines = function() return prefs.lines end,
+        onLines = function(value) setPref("lines", value) end,
+        onOpen = function()
+            if hasToolbar then
+                pcall(gridtoolbar.closeLists)   -- an open list or popup would sit over the page
+            end
+        end,
+    })
+    hasSettings = ok
+    if not ok then
+        log("[error] grid settings: " .. tostring(err) .. " (showing the grid without the gear)")
+        pcall(gridsettings.detach)
+    end
+end
+
+local function detachSettings()
+    if hasSettings then
+        pcall(gridsettings.detach)
+    end
+    hasSettings = false
+end
+
 -- Removes the toolbar before its window goes: its lists and popup are on
 -- the game area, so they would outlive the window.
 local function destroyToolbar()
@@ -867,6 +979,20 @@ local function updateView(view, cell, now)
     if word ~= view.typeText then
         view.type.content = word
         view.typeText = word
+    end
+    if view.health ~= nil then
+        -- Just the number, even for "50% or less" (healthValue 50): the
+        -- card and the hover text say "or less". %d needs a whole number.
+        local health = cell.healthValue and string.format("%d%%", math.floor(cell.healthValue)) or ""
+        if health ~= view.healthText then
+            view.health.content = health
+            view.healthText = health
+        end
+        local place = cell.cellPlace or ""      -- a hint without "Hint: "
+        if place ~= view.placeText then
+            view.place.content = place
+            view.placeText = place
+        end
     end
     if cell.kind ~= view.kind then
         view.kind = cell.kind
@@ -1003,6 +1129,7 @@ local function createWindow()
             wantOpen = false
             reportLayout()
             destroyToolbar()
+            detachSettings()
             forgetWindow()
         end,
         onPositionChange = function(_, x, y)
@@ -1017,6 +1144,7 @@ local function createWindow()
     buildCard()
     buildNotice()
     buildToolbar(parent)
+    attachSettings()
     return true
 end
 
@@ -1024,6 +1152,7 @@ end
 -- reopens after a reload).
 local function destroyWindow()
     destroyToolbar()
+    detachSettings()
     if window ~= nil then
         pcall(function() window:Destroy() end)
     end
@@ -1056,12 +1185,12 @@ end
 
 -- The saved sort and filters from store.gridView (or nil), in the form
 -- onViewChange gives them: { sort = "soonest", worlds = "all",
--- info = "any", trees = "yew,magic" }. Anything odd or out of date falls
+-- info = "any", trees = "yew,magic", lines = "two" }. Anything odd or out of date falls
 -- back to the default (filters.normalize). Call before the window opens.
 function grid.restoreView(state)
     local saved = {}
     if type(state) == "table" then
-        saved.sort, saved.worlds, saved.info = state.sort, state.worlds, state.info
+        saved.sort, saved.worlds, saved.info, saved.lines = state.sort, state.worlds, state.info, state.lines
         saved.trees = {}
         if type(state.trees) == "string" then
             -- "[^,]+" matches each run of characters that aren't commas, so
@@ -1079,6 +1208,18 @@ end
 -- the form) when the player changes them.
 function grid.setOnViewChange(fn)
     onViewChange = fn
+end
+
+-- One or two lines per cell: "two" or "one" (see core/filters.lua, LINES).
+-- For the client's settings page (ui/gridsettings.lua, fillHub).
+function grid.lines()
+    return prefs.lines
+end
+
+-- Sets the lines from the settings page: saved, and an open grid is built
+-- again with the new cells.
+function grid.setLines(lines)
+    setPref("lines", lines)
 end
 
 -- True while the player wants the grid open (main.lua then builds the data).
@@ -1128,11 +1269,20 @@ function grid.update(cells, now, total)
     end
 end
 
--- Called every frame (50 a second) by main.lua, so the toolbar notices a
--- dropdown opening straight away (see gridtoolbar.onLogic). Does nothing
--- while there is no toolbar. If it fails, the toolbar is removed, so the
+-- Called every frame (50 a second) by main.lua, so the title bar's drag
+-- strip stays short of the settings gear (see gridsettings.onLogic) and
+-- the toolbar notices a dropdown opening straight away (see
+-- gridtoolbar.onLogic). The toolbar part does nothing while there is no
+-- toolbar. If it fails, the toolbar is removed, so the
 -- error is logged once, not 50 times a second.
 function grid.onLogic()
+    if hasSettings then
+        local ok, err = pcall(gridsettings.onLogic)
+        if not ok then
+            log("[error] grid settings: " .. tostring(err) .. " (gear removed)")
+            detachSettings()
+        end
+    end
     if not hasToolbar then
         return
     end

@@ -409,6 +409,11 @@ function gridtoolbar.setTop(y)
     laidOutWidth = nil      -- makes the next refresh lay everything out again
 end
 
+-- Closes an open list or the Tree popup (when the settings page opens).
+function gridtoolbar.closeLists()
+    closeAll()
+end
+
 -- Shows these choices without calling onChange (after Reset).
 function gridtoolbar.showPrefs(prefs)
     for _, name in ipairs(COMBO_NAMES) do

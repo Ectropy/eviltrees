@@ -56,7 +56,9 @@ local CHROME = 40           -- fake title bar + borders
 -- The toolbar's PrettyUI widgets, recorded so the tests can "click" them.
 local combos = {}           -- every ComboBox, in order (each toolbar makes Sort, Worlds, Info)
 local checkboxes = nil      -- the newest CheckboxButton (the Tree popup's ticks)
-local resetButton = nil     -- the newest SimpleButton (Reset)
+local resetButton = nil     -- the newest Reset SimpleButton
+local gearButton = nil      -- the newest SpriteButton (the settings gear)
+local radio = nil           -- the newest RadioButton (the gear's page)
 local contexts = {}         -- every Tooltip.registerContext call
 local brokenToolbar = false -- true: a PrettyUI without ComboBox (the toolbar fails to build)
 
@@ -68,6 +70,7 @@ prettyui = {
       function tip:SetText(text) self.text = text end
       function tip:Show() self.shown = true end
       function tip:Hide() self.shown = false end
+      function tip:Destroy() self.destroyed = true end
       target.tip = tip
       return tip
     end,
@@ -127,12 +130,44 @@ prettyui = {
     end,
   },
   SimpleButton = { new = function(parent, text, action, options)
-    local button = { text = text, action = action }
+    local button = { text = text, action = action, content = { content = text } }   -- content: its Text
     button.root = newComponent("Button", parent)
     button.root:SetSize(options.width, options.height)
     function button:Destroy() self.destroyed = true end
     resetButton = button
     return button
+  end },
+  SpriteButton = { new = function(parent, name, action, options)
+    local button = { name = name, action = action, options = options }
+    button.root = newComponent("Gear", parent)
+    function button:Destroy() self.destroyed = true end
+    gearButton = button
+    return button
+  end },
+  -- A radio: click(value) is the player picking a choice.
+  RadioButton = { new = function(parent, choices, options)
+    local box = { choices = choices, options = options, value = options.selectedValue }
+    box.root = newComponent("Radio", parent)
+    function box:SetSelectedValue(value, notify)
+      self.value = value
+      if notify ~= false then self.options.onChange(self, value) end
+    end
+    function box:click(value) if value ~= self.value then self:SetSelectedValue(value) end end
+    radio = box
+    return box
+  end },
+  -- The client's settings page's view: records its title and radio (see ui/gridsettings.lua).
+  SimpleView = { new = function(parent, options)
+    local view = { parent = parent, options = options }
+    function view:AddTitle(text) self.title = text end
+    function view:AddRadioButton(choices, radioOptions)
+      self.choices, self.radio = choices, radioOptions
+      local control = { value = radioOptions.selectedValue }
+      function control:SetSelectedValue(value) self.value = value end
+      self.radioControl = control
+      return control
+    end
+    return view
   end },
   Window = { new = function(_, options)
     local window = { options = options, title = options.title, overlays = {} }
@@ -143,6 +178,10 @@ prettyui = {
     window.content.width = options.width - 16
     window.viewport = { height = options.height - CHROME }
     window._onScrollWheel = function() end
+    -- The title bar's drag strip (on the game area) and the title text.
+    window.titleDrag = { width = options.width - 34 }
+    function window.titleDrag:SetSize(w) self.width = w end
+    window.titleText = newComponent("Text", window.root)
     -- The scroll area: under the title bar (32), inside the 8-wide borders.
     if not noScrollArea then
       window._scroll = { root = newComponent("ScrollArea") }
@@ -169,22 +208,23 @@ prettyui = {
 }
 
 -- Helpers to read the "screen".
--- Cells are the 18-tall Layers in the newest window's content (the fake
--- Window:Destroy leaves an old window's cells in the list).
+-- Cells are the 18-tall (one line) or 34-tall (two lines) Layers in the
+-- newest window's content (the fake Window:Destroy leaves an old window's
+-- cells in the list).
 local function cellsOnScreen()
   local list = {}
   local content = windows[#windows].content
   for _, c in ipairs(components) do
-    if c.kind == "Layer" and c.h == 18 and c.parent == content and not c.destroyed then list[#list + 1] = c end
+    if c.kind == "Layer" and (c.h == 18 or c.h == 34) and c.parent == content and not c.destroyed then list[#list + 1] = c end
   end
   return list
 end
-local function textsOf(layer)      -- name, timer, tree type
+local function textsOf(layer)      -- name, timer, tree type (two lines: and health, place)
   local texts = {}
   for _, c in ipairs(components) do
     if c.kind == "Text" and c.parent == layer then texts[#texts + 1] = c end
   end
-  return texts[1], texts[2], texts[3]
+  return texts[1], texts[2], texts[3], texts[4], texts[5]
 end
 local function spritesOf(layer)    -- the icon slot: game sprite, item icon
   local sprites = {}
@@ -307,6 +347,9 @@ local function cells(now) return overview.cells(records, worldList, 204, now) en
 
 local states = {}
 grid.setOnLayoutChange(function(state) states[#states + 1] = state end)
+-- Most tests below use one-line cells; two-line cells have their own
+-- section (lines). The saved choices switch back to the default (two).
+grid.restoreView({ lines = "one" })
 
 ---------------------------------------------------------------- closed
 grid.update(cells(NOW), NOW, 137)
@@ -804,6 +847,102 @@ records[205] = nil
 update()
 worldsCombo:Select("all", true)
 
+---------------------------------------------------------------- settings page (ui/gridsettings.lua)
+-- The client hands us an empty layer; we fill it with a title and a radio
+-- that calls grid.setLines.
+local gridsettings = require("ui/gridsettings")
+local settingsLayer = { width = 300, height = 200 }
+local settings = gridsettings.fillHub(settingsLayer, grid.lines(), grid.setLines)
+check("S1 on the client's layer, inside a margin", tostring(settings.parent == settingsLayer) .. "," .. settings.options.width, "true,284")
+check("S2 title", settings.title, "Cells")
+check("S3 choices", settings.choices[1].value .. "=" .. settings.choices[1].text .. "|" .. settings.choices[2].value .. "=" .. settings.choices[2].text,
+  "two=Two lines|one=One line")
+check("S4 shows the saved choice", settings.radio.selectedValue, "one")
+local function pickLines(value) settings.radio.onChange(settings, value) end
+
+-- The gear in the grid's title bar: on the window, anchored to its right
+-- edge, left of the close button.
+check("S5 gear on the window, from the right edge", tostring(gearButton.root.parent == window.root) .. ","
+  .. gearButton.options.x .. "," .. gearButton.options.y .. "," .. gearButton.options.xAnchor, "true,-52,7,1.0")
+-- PrettyUI's drag strip stops short of the gear: 500 - 52 - 2 = 446.
+check("S6 drag strip kept short of the gear", window.titleDrag.width, 446)
+window.titleDrag.width = 466            -- PrettyUI sets it again after a drag or resize
+grid.onLogic()
+check("S7 shortened again", window.titleDrag.width, 446)
+window.dragFeedback = {}                -- a drag is going on: the strip covers the screen
+window.titleDrag.width = 1920
+grid.onLogic()
+check("S8 left alone during a drag", window.titleDrag.width, 1920)
+window.dragFeedback = nil
+grid.onLogic()
+-- The page: opens over the grid, the gear underlined, the saved choice shown.
+local gearPage = radio.root.parent
+local function gearUnderline()
+  return lastComponent(function(c) return c.kind == "Rectangle" and c.parent == window.root and c.fill == true end)
+end
+check("S9 page and underline hidden", tostring(gearPage.hidden) .. "," .. tostring(gearUnderline().hidden), "true,true")
+sortCombo.open = true
+gearButton.action()
+check("S10 gear opens the page, underlined", tostring(gearPage.hidden) .. "," .. tostring(gearUnderline().hidden), "false,false")
+check("S11 open list closed", sortCombo.open, false)
+check("S12 page shows the saved choice", radio.value, "one")
+gearButton.action()
+check("S13 gear again closes it", tostring(gearPage.hidden) .. "," .. tostring(gearUnderline().hidden), "true,true")
+-- The two pages stay in step: a choice on one shows on the other.
+gearButton.action()
+pickLines("two")                -- on the client's page, while the grid's page is open
+check("S14 client's choice shows on the grid's page", radio.value, "two")
+radio:click("one")              -- and back, on the grid's page
+check("S15 grid's choice shows on the client's page", settings.radioControl.value, "one")
+gearButton.action()
+
+---------------------------------------------------------------- lines: two-line cells
+-- Picking "Two lines" on the settings page: the cells are built again, 34
+-- tall, with the health after the tree type and the place on line 2.
+-- Widths (every letter 6): line 1 = 137 + "Willow" (36) + 6 + "100%" (24)
+-- + 6 = 209; line 2 = 3 + "S. Tree Gnome Stronghold" (144) + 3 = 150.
+-- So cells are at least 209: (472 + 3) // (209 + 3) = 2 columns of
+-- (472 - 3) // 2 = 234.
+records[5] = { status = "alive", health = 50, healthSource = "strike",
+               matureAt = NOW - 15 * MINUTE, matureEarliest = NOW - 15 * MINUTE, matureLatest = NOW - 15 * MINUTE }
+update()
+check("Z1 one line to start", cellFor(204).h, 18)
+local _, _, _, oneHealth = textsOf(cellFor(204))
+check("Z1b no health text in one-line cells", oneHealth, nil)
+local oldCell = cellFor(204)
+radio:click("two")
+update()
+check("Z2 saved", views[#views].lines, "two")
+check("Z4 cells built again, two lines tall", tostring(oldCell.destroyed) .. "," .. cellFor(204).h, "true,34")
+check("Z4b old tooltips removed too", oldCell.tip.destroyed, true)
+local twoName, twoTimer, twoType, twoHealth, twoPlace = textsOf(cellFor(204))
+check("Z5 line 1 as before", twoName.content .. "|" .. twoType.content .. "|" .. twoTimer.y, "w204|Willow|1")
+check("Z6 health after the type column", twoHealth.content .. "," .. twoHealth.x .. "," .. twoHealth.y, "45%,92,1")
+check("Z7 place on line 2, full width", twoPlace.content ~= "" and twoPlace.y .. "," .. twoPlace.w, "17,-6")
+check("Z7b place is the cell's", twoPlace.content, overview.cells(records, worldList, 204, NOW)[7].cellPlace)
+local _, _, _, upperHealth = textsOf(cellFor(5))
+check("Z8 an upper bound shows just the number", upperHealth.content, "50%")
+check("Z9 width: line 1 decides", cellFor(1).w, 234)
+check("Z10 rows 34 + 3 apart", math.abs(cellFor(3).y - cellFor(1).y), 37)
+-- No willow any more: "Elder" (30, w4's sapling) is the widest type, so
+-- the type column narrows and the health moves left with it.
+records[204].treeType = nil
+update()
+check("Z11 health moves with the type column", (select(4, textsOf(cellFor(204)))).x, 20 + 24 + 6 + 30 + 6)
+records[204].treeType = "willow"
+-- Reset keeps the lines.
+worldsCombo:Select("p2p", true)
+resetButton.action()
+update()
+check("Z12 Reset keeps two lines", views[#views].lines .. "," .. cellFor(204).h, "two,34")
+-- And back to one line.
+pickLines("one")
+update()
+check("Z13 one line again", views[#views].lines .. "," .. cellFor(204).h .. "," .. tostring(select(4, textsOf(cellFor(204)))),
+  "one,18,nil")
+records[5] = nil
+update()
+
 ---------------------------------------------------------------- toolbar: saved choices
 -- restoreView takes the saved strings; anything odd falls back to the default.
 grid.destroy()
@@ -873,7 +1012,9 @@ check("Y11 one error", #logged .. "|" .. string.sub(logged[1] or "", 1, 20), "1|
 update()
 check("Y12 then every world shows", shownWorlds(), "1,2,3,4,5,6,204")
 check("Y13 dropdowns removed", sortCombo.destroyed, true)
+local lastGear = gearButton
 grid.destroy()
+check("Y14 gear removed with the window", lastGear.destroyed, true)
 
 ---------------------------------------------------------------- which picture (ui/icons.lua)
 local icons = require("ui/icons")

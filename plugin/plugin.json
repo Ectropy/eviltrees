@@ -9,5 +9,6 @@
     "requiredPermissions": [],
     "optionalPermissions": [ "chatAccess" ],
     "urls": {},
-    "hasRibbonIcon": true
+    "hasRibbonIcon": true,
+    "hasSettingsIcon": true
 }

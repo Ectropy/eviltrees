@@ -28,6 +28,7 @@
       ui/grid.lua               - every world in a floating window (PrettyUI)
       ui/gridtoolbar.lua        - the grid's Sort / Worlds / Info / Tree toolbar
       ui/treepicker.lua         - the toolbar's Tree button and its tick boxes
+      ui/gridsettings.lua       - the settings (grid title-bar gear, and the client's Settings icon)
       ui/icons.lua              - status icons (game sprites) and log item icons
       ui/colours.lua            - the colours the grid, card and ribbon page share
       ui/parts.lua              - a Rectangle and a one-line Text, for cells and the card
@@ -80,9 +81,10 @@ local overview = require("core/overview")
 local sampledata = require("core/sampledata")
 local dashboard = require("ui/dashboard")
 local grid = require("ui/grid")
+local gridsettings = require("ui/gridsettings")
 local debugPanel = require("ui/debugpanel")
 
-local VERSION = "0.7.0-dev"
+local VERSION = "0.8.0-dev"
 local MAX_RECENT = 3            -- how many recent captures the debug panel lists
 local MAX_OTHER_WORLDS = 4      -- how many other worlds' records it lists
 local MS_PER_MINUTE = 60000
@@ -678,6 +680,15 @@ else
     if not debugPanel.attachFloating() then
         log("Evil Trees: game window not ready; log in, then reload with: prl evil-trees")
     end
+end
+
+-- The settings page. The client draws a Settings icon for us
+-- ("hasSettingsIcon" in plugin.json); this fires each time the player opens
+-- it, with an empty layer to fill. Needs PrettyUI, like the grid.
+if prettyui ~= nil then
+    Event.SettingsLayerReady.Subscribe("evilTrees", safe.handler("SettingsLayerReady", function(event)
+        gridsettings.fillHub(event.component, grid.lines(), grid.setLines)
+    end))
 end
 
 -------------------------------------------------------------------------------
