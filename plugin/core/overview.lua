@@ -249,10 +249,10 @@ end
 --             e.g. a world newer than our list)
 --   current   true for the world you're on
 --   kind      see cellKind
---   treeType  "Willow" (or nil)
---   typeWord  what the cell says about the type: "Willow", for a sapling,
---             an alive or a dead tree alike (the icon and the colour say
---             which it is); nil if we don't know the type
+--   treeType  the type as the cell shows it: "Willow", for a sapling, an
+--             alive or a dead tree alike (the icon and the colour say which
+--             it is); nil if we don't know the type. Capitalised, unlike the
+--             record's treeType ("willow").
 --   health    "95%" or "50% or less" (alive trees only, or nil)
 --   cellPlace the place for a two-line cell: as place, but a hint without
 --             "Hint: " (no room to spare); nil if place is nil
@@ -310,9 +310,8 @@ local function buildCell(number, members, record, currentNumber, now)
         elseif record.status == "alive" or record.status == "dead" then
             cell.treeKey = record.treeType or "unknown"     -- a ?? b in JS
         end
-        cell.treeType = overview.TYPE_WORDS[record.treeType]  -- nil if no type (TYPE_WORDS[nil] is nil)
-        if cell.treeType ~= nil and cell.treeKey ~= nil then    -- a typed tree is up
-            cell.typeWord = cell.treeType
+        if cell.treeKey ~= nil then     -- a tree is up
+            cell.treeType = overview.TYPE_WORDS[record.treeType]  -- nil if no type (TYPE_WORDS[nil] is nil)
         end
         cell.status = describeTree(record)
         if record.status == "alive" then

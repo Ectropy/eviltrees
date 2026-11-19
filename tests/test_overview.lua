@@ -288,13 +288,13 @@ check("H4 current cell: world not known yet", overview.currentCell({}, nil, nil,
 check("H5 the type words are public (the grid measures them)", overview.TYPE_WORDS.elder, "Elder")
 -- What a cell says about the type: the word (a sapling's too), nothing
 -- when the type isn't known.
-local function typeWord(record) return overview.cells({ [3] = record }, worldList, nil, NOW)[1].typeWord end
-check("K6 type word: typed sapling", mine.typeWord, "Elder")
-check("K7 type word: alive", typeWord({ status = "alive", treeType = "yew", matureAt = NOW }), "Yew")
-check("K8 type word: dead", typeWord({ status = "dead", treeType = "oak", deadAt = NOW }), "Oak")
-check("K9 type word: the type tree", typeWord({ status = "alive", treeType = "tree", matureAt = NOW }), "Tree")
-check("K10 type word: none for unknown types",
-  tostring(typeWord({ status = "sapling", spawnAt = NOW })) .. "," .. tostring(typeWord({ status = "alive", matureAt = NOW })), "nil,nil")
+local function cellType(record) return overview.cells({ [3] = record }, worldList, nil, NOW)[1].treeType end
+check("K6 cell type: typed sapling", mine.treeType, "Elder")
+check("K7 cell type: alive", cellType({ status = "alive", treeType = "yew", matureAt = NOW }), "Yew")
+check("K8 cell type: dead", cellType({ status = "dead", treeType = "oak", deadAt = NOW }), "Oak")
+check("K9 cell type: the type tree", cellType({ status = "alive", treeType = "tree", matureAt = NOW }), "Tree")
+check("K10 cell type: none for unknown types",
+  tostring(cellType({ status = "sapling", spawnAt = NOW })) .. "," .. tostring(cellType({ status = "alive", matureAt = NOW })), "nil,nil")
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

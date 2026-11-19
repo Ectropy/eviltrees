@@ -1225,7 +1225,7 @@ local function updateView(view, cell, now)
         view.timerText = timer
     end
     -- The tree type, when we know it ("" otherwise).
-    local word = cell.typeWord or ""
+    local word = cell.treeType or ""
     if word ~= view.typeText then
         view.type.content = word
         view.typeText = word
@@ -1313,8 +1313,8 @@ render = function(cells, now, total)
     local widest = 0            -- the widest tree type text on show
     for _, cell in ipairs(cells) do
         updateView(viewsByWorld[cell.world], cell, now)
-        if cell.typeWord ~= nil then
-            widest = math.max(widest, wordWidth(cell.typeWord))
+        if cell.treeType ~= nil then
+            widest = math.max(widest, wordWidth(cell.treeType))
         end
     end
     -- Cells get wider when a wider type word appears (the first type, or
