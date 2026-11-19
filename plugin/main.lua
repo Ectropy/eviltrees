@@ -692,7 +692,7 @@ end
 -- it, with an empty layer to fill. Needs PrettyUI, like the grid.
 if prettyui ~= nil then
     Event.SettingsLayerReady.Subscribe("evilTrees", safe.handler("SettingsLayerReady", function(event)
-        gridsettings.fillHub(event.component, grid.lines(), grid.setLines)
+        gridsettings.fillHub(event.component, grid.choice, grid.setChoice)
     end))
 end
 

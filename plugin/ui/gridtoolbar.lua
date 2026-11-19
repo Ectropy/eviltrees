@@ -398,13 +398,14 @@ function gridtoolbar.refresh(available, prefs, shown, total)
     return height
 end
 
--- Moves the toolbar to start at height y on the window (the card above
--- it grew or shrank). The controls are placed again on the next refresh.
-function gridtoolbar.setTop(y)
-    if y == originY then
+-- Moves the toolbar to start at (x, y) on the window: the card above it
+-- grew or shrank, or moved to a side of the grid. The controls are placed
+-- again on the next refresh.
+function gridtoolbar.setOrigin(x, y)
+    if x == originX and y == originY then
         return
     end
-    originY = y
+    originX, originY = x, y
     closeAll()              -- an open list would be left where its control was
     laidOutWidth = nil      -- makes the next refresh lay everything out again
 end

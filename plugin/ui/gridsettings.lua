@@ -6,6 +6,10 @@
         Cells
         (o) Two lines
         ( ) One line
+        World card
+        (o) Above the grid
+        ( ) Left of the grid
+        ( ) Right of the grid
 
       1. The client's settings page. "hasSettingsIcon": true in plugin.json
          makes the client draw a Settings icon (Plugin Hub > Manage). When
@@ -18,11 +22,13 @@
          gear is underlined while it is open, and a second click closes it.
 
     Both pages stay in step: a choice made on one shows on the other at
-    once (gridsettings.showLines, called by ui/grid.lua).
+    once (gridsettings.showChoice, called by ui/grid.lua).
 
-    Today there is one setting, the cells' lines (the choices are
-    core/filters.lua's LINES); more can go here. This file only draws:
-    ui/grid.lua keeps the choice and saves it.
+    Each setting is one entry in SETTINGS below: a heading and a radio,
+    made from one of core/filters.lua's lists (LINES, CARD). Adding a
+    setting is adding an entry there. This file only draws: ui/grid.lua
+    keeps the choices and saves them. (The world card's place can also be
+    changed with the arrows on the card itself: see ui/grid.lua.)
 
     How the gear works (the same way as the Quest Helper plugin, which is
     BSD-licensed and allows AI use; no code copied):
@@ -63,6 +69,8 @@ local TITLE_HEIGHT = 32         -- PrettyUI's title bar
 local TITLE_WIDTH = -80         -- the title text's width (window width - 80), so it doesn't run under the gear
 local PAD = 10                  -- inside the page
 local HEADING_HEIGHT = 20
+local RADIO_ROW = 22            -- one choice in a PrettyUI RadioButton (its ROW_HEIGHT)
+local SECTION_GAP = 10          -- between one setting's radio and the next heading
 local PAGE_BG = 0x1B1814FF      -- solid, close to the window's own background
 local GOLD = 0xF2C66DFF         -- PrettyUI's title gold: the heading and the underline
 
@@ -73,40 +81,60 @@ local GOLD = 0xF2C66DFF         -- PrettyUI's title gold: the heading and the un
 local window = nil          -- the grid's PrettyUI Window, while the gear exists
 local gear = nil            -- the gear SpriteButton
 local underline = nil       -- the gold line under the gear, shown while the page is open
-local page = nil            -- the page's parts: { root, radio }
-local handlers = nil        -- { lines, onLines, onOpen } from attach
-local hubRadio = nil        -- the radio on the client's settings page, once it has been opened
+local page = nil            -- the page's parts: { root, radios = { lines = radio, card = radio } }
+local handlers = nil        -- { get, onPick, onOpen } from attach
+local hubRadios = {}        -- the radios on the client's settings page, once it has been opened: hubRadios.card, ...
 
 -------------------------------------------------------------------------------
 -- Shared
 -------------------------------------------------------------------------------
 
--- The choices from filters.LINES, in the form PrettyUI wants ({ value,
--- text }), like LINES.map(e => ({ value: e.id, text: e.label })) in JS.
-local function lineChoices()
+-- The settings, in the order they show. group is the prefs field it sets
+-- (see core/filters.lua), title its heading, entries its choices.
+local SETTINGS = {
+    { group = "lines", title = "Cells", entries = filters.LINES },
+    { group = "card", title = "World card", entries = filters.CARD },
+}
+
+-- A setting's choices in the form PrettyUI wants ({ value, text }), like
+-- entries.map(e => ({ value: e.id, text: e.label })) in JS.
+local function choicesOf(entries)
     local choices = {}
-    for index, entry in ipairs(filters.LINES) do
+    for index, entry in ipairs(entries) do
         choices[index] = { value = entry.id, text = entry.label }
     end
     return choices
 end
 
--- Calls onLines(value), logging an error instead of losing it (like
+-- Calls onPick(group, value), logging an error instead of losing it (like
 -- try/catch). For the radios' onChange, which the game calls directly.
-local function pickLines(onLines, value)
-    local ok, err = pcall(onLines, value)
+local function pick(onPick, group, value)
+    local ok, err = pcall(onPick, group, value)
     if not ok then
         log("[error] settings: " .. tostring(err))
     end
+end
+
+-- How tall the grid's settings page needs to be: each setting's heading
+-- and radio, and the gaps (as buildPage stacks them). ui/grid.lua keeps
+-- the window at least this tall inside.
+function gridsettings.pageHeight()
+    local height = PAD
+    for _, setting in ipairs(SETTINGS) do
+        height = height + HEADING_HEIGHT + 2 + #setting.entries * RADIO_ROW + SECTION_GAP
+    end
+    return height
 end
 
 -------------------------------------------------------------------------------
 -- 1. The client's settings page
 -------------------------------------------------------------------------------
 
--- Fills the client's settings layer. lines is the choice to show ("two"
--- or "one"); onLines(linesId) is called when the player picks one.
-function gridsettings.fillHub(layer, lines, onLines)
+-- Fills the client's settings layer. get(group) is the choice to show
+-- for a setting (get("lines") is "two" or "one", get("card") is "top",
+-- "left" or "right"); onPick(group, value) is called when the player
+-- picks one.
+function gridsettings.fillHub(layer, get, onPick)
     local view = prettyui.SimpleView.new(layer, {
         categoryID = "auto",    -- PrettyUI picks free component IDs (its "Component IDs" docs)
         x = MARGIN,
@@ -114,13 +142,18 @@ function gridsettings.fillHub(layer, lines, onLines)
         width = (layer.width or 300) - 2 * MARGIN,
         height = (layer.height or 400) - 2 * MARGIN,
     })
-    view:AddTitle("Cells")
-    -- onChange(radio, value) runs when the player picks a choice. Kept, so
-    -- a choice made on the grid's page can show here too.
-    hubRadio = view:AddRadioButton(lineChoices(), {
-        selectedValue = lines,
-        onChange = function(_, value) pickLines(onLines, value) end,
-    })
+    hubRadios = {}
+    -- ipairs walks SETTINGS in order, like for...of; "_" ignores the index.
+    for _, setting in ipairs(SETTINGS) do
+        local group = setting.group     -- a fresh local per setting, so each onChange below keeps its own
+        view:AddTitle(setting.title)
+        -- onChange(radio, value) runs when the player picks a choice. Kept,
+        -- so a choice made on the grid's page can show here too.
+        hubRadios[group] = view:AddRadioButton(choicesOf(setting.entries), {
+            selectedValue = get(group),
+            onChange = function(_, value) pick(onPick, group, value) end,
+        })
+    end
     return view
 end
 
@@ -138,18 +171,27 @@ local function buildPage(left, top)
     root.clickthrough = false                       -- takes the mouse, so the cells under it don't
     parts.rectangle(root, true, PAGE_BG)
 
-    local heading = parts.text(root, PAD, PAD, 0, HEADING_HEIGHT, nil, id.Font.MUSEO_SANS_13PT_BOLD)
-    heading:SetSize(-2 * PAD, HEADING_HEIGHT, 1.0, 0)
-    heading.content = "Cells"
-    heading.rgba = GOLD
+    -- Each setting: a gold heading, then its radio, stacked downwards.
+    local radios = {}
+    local y = PAD
+    for _, setting in ipairs(SETTINGS) do
+        local group = setting.group
+        local heading = parts.text(root, PAD, y, 0, HEADING_HEIGHT, nil, id.Font.MUSEO_SANS_13PT_BOLD)
+        heading:SetSize(-2 * PAD, HEADING_HEIGHT, 1.0, 0)
+        heading.content = setting.title
+        heading.rgba = GOLD
+        y = y + HEADING_HEIGHT + 2
 
-    local radio = prettyui.RadioButton.new(root, lineChoices(), {
-        x = PAD, y = PAD + HEADING_HEIGHT + 2,
-        width = -2 * PAD, widthAnchor = 1.0,        -- as wide as the page
-        selectedValue = handlers.lines(),
-        onChange = function(_, value) pickLines(handlers.onLines, value) end,
-    })
-    page = { root = root, radio = radio }
+        radios[group] = prettyui.RadioButton.new(root, choicesOf(setting.entries), {
+            x = PAD, y = y,
+            width = -2 * PAD, widthAnchor = 1.0,        -- as wide as the page
+            selectedValue = handlers.get(group),
+            onChange = function(_, value) pick(handlers.onPick, group, value) end,
+        })
+        -- #setting.entries is the number of choices (# is a list's length).
+        y = y + #setting.entries * RADIO_ROW + SECTION_GAP
+    end
+    page = { root = root, radios = radios }
 end
 
 -- The gear and its underline, on the window, anchored to its right edge
@@ -184,9 +226,9 @@ end
 
 -- Builds the gear and the (hidden) page on newWindow. left / top: where
 -- the window's inside starts. newHandlers:
---   lines()           the choice to show ("two" or "one")
---   onLines(linesId)  the player picked one
---   onOpen()          the page is about to show (to close open lists)
+--   get(group)            the choice to show for a setting (see fillHub)
+--   onPick(group, value)  the player picked one
+--   onOpen()              the page is about to show (to close open lists)
 -- Throws if something is missing; grid.lua then calls gridsettings.detach
 -- and goes on without the gear.
 function gridsettings.attach(newWindow, left, top, newHandlers)
@@ -201,13 +243,17 @@ function gridsettings.isOpen()
 end
 
 -- Shows the page in front of everything else on the window, with the
--- current choice (it may have changed on the client's settings page).
+-- current choices (they may have changed on the client's settings page,
+-- or with the card's arrows).
 function gridsettings.open()
     if page == nil then
         return
     end
     handlers.onOpen()
-    page.radio:SetSelectedValue(handlers.lines(), false)   -- false: don't call onChange
+    -- pairs walks a table's keys and values (like Object.entries in JS).
+    for group, radio in pairs(page.radios) do
+        radio:SetSelectedValue(handlers.get(group), false)  -- false: don't call onChange
+    end
     page.root.hidden = false
     page.root:MoveToFront()
     gear.root:MoveToFront()     -- the page covers the window's inside, not the title bar, but to be sure
@@ -221,15 +267,16 @@ function gridsettings.close()
     end
 end
 
--- Shows a choice on both pages without calling onChange, after it was
--- picked on one of them. The client may have cleared its page since (its
--- radio is then gone), so each update is in a pcall.
-function gridsettings.showLines(lines)
-    if hubRadio ~= nil then
-        pcall(function() hubRadio:SetSelectedValue(lines, false) end)   -- false: don't call onChange
+-- Shows a setting's choice on both pages without calling onChange, after
+-- it was picked somewhere (one of the pages, or the card's arrows). group
+-- is "lines" or "card". The client may have cleared its page since (its
+-- radios are then gone), so each update is in a pcall.
+function gridsettings.showChoice(group, value)
+    if hubRadios[group] ~= nil then
+        pcall(function() hubRadios[group]:SetSelectedValue(value, false) end)   -- false: don't call onChange
     end
-    if page ~= nil then
-        pcall(function() page.radio:SetSelectedValue(lines, false) end)
+    if page ~= nil and page.radios[group] ~= nil then
+        pcall(function() page.radios[group]:SetSelectedValue(value, false) end)
     end
 end
 

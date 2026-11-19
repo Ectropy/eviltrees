@@ -11,10 +11,12 @@
 
     The user's choices ("prefs") are a table like:
         { sort = "soonest", worlds = "p2p", info = "any", trees = { "yew", "magic" },
-          lines = "two" }
-    sort / worlds / info / lines are one id from the lists below. lines is
-    not a filter: it says how the cells are drawn (one or two lines each),
-    and is kept here so it is saved and checked with the rest. trees is a list of
+          lines = "two", card = "top" }
+    sort / worlds / info / lines / card are one id from the lists below.
+    lines and card are not filters: they say how the grid is drawn (one or
+    two lines per cell; the world card above the cells or as a sidebar on
+    the left or right), and are kept here so they are saved and checked
+    with the rest. trees is a list of
     tree keys; an empty list means any tree. Prefs get saved, so always run
     saved data through filters.normalize before using it.
 
@@ -65,6 +67,15 @@ filters.LINES = {
     { id = "one", label = "One line" },
 }
 
+-- Where the grid's world card goes: above the cells (the default), or as
+-- a sidebar beside them, for a wide grid. Not a filter either. Chosen on
+-- the settings pages, or with the arrows on the card (ui/grid.lua).
+filters.CARD = {
+    { id = "top", label = "Above the grid" },
+    { id = "left", label = "Left of the grid" },
+    { id = "right", label = "Right of the grid" },
+}
+
 -- Tree keys are the cell's treeKey: see overview.lua.
 filters.TREES = {
     { id = "unknown", label = "Unknown" },
@@ -86,7 +97,7 @@ filters.TREES = {
 -- change made through one variable would show up in all of them, as with
 -- a shared object in JS. So there is no shared DEFAULTS table.)
 function filters.defaults()
-    return { sort = "world", worlds = "all", info = "any", trees = {}, lines = "two" }
+    return { sort = "world", worlds = "all", info = "any", trees = {}, lines = "two", card = "top" }
 end
 
 -- true if id is one of the entries' ids. ipairs walks an array in order,
@@ -121,6 +132,7 @@ function filters.normalize(saved)
     prefs.worlds = validId(filters.WORLDS, saved.worlds, prefs.worlds)
     prefs.info = validId(filters.INFOS, saved.info, prefs.info)
     prefs.lines = validId(filters.LINES, saved.lines, prefs.lines)
+    prefs.card = validId(filters.CARD, saved.card, prefs.card)
 
     if type(saved.trees) == "table" then
         -- First a set of what was saved: chosen["yew"] = true. A set makes

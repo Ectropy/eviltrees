@@ -57,10 +57,13 @@ local CHROME = 40           -- fake title bar + borders
 local combos = {}           -- every ComboBox, in order (each toolbar makes Sort, Worlds, Info)
 local checkboxes = nil      -- the newest CheckboxButton (the Tree popup's ticks)
 local resetButton = nil     -- the newest Reset SimpleButton
-local gearButton = nil      -- the newest SpriteButton (the settings gear)
-local radio = nil           -- the newest RadioButton (the gear's page)
+local gearButton = nil      -- the newest settings gear (a SpriteButton named SETTINGS)
+local spriteButtons = {}    -- the newest SpriteButton of each name: spriteButtons.ARROW_LEFT, ...
+local radio = nil           -- the newest "lines" RadioButton (the gear's page)
+local cardRadio = nil       -- the newest "card" RadioButton (the gear's page)
 local contexts = {}         -- every Tooltip.registerContext call
 local brokenToolbar = false -- true: a PrettyUI without ComboBox (the toolbar fails to build)
+local brokenArrows = false  -- true: a PrettyUI without the ARROW_* sprites (SpriteButton throws for them)
 
 prettyui = {
   NewComponent = newComponent,
@@ -138,10 +141,16 @@ prettyui = {
     return button
   end },
   SpriteButton = { new = function(parent, name, action, options)
-    local button = { name = name, action = action, options = options }
-    button.root = newComponent("Gear", parent)
+    if brokenArrows and string.sub(name, 1, 6) == "ARROW_" then error("Unknown SpriteButton sprite: " .. name) end
+    local button = { name = name, action = action, options = options, disabled = false }
+    button.root = newComponent("SpriteButton", parent)
+    -- Its hover text: counts how often it was hidden.
+    button.tooltip = { hides = 0 }
+    function button.tooltip:Hide() self.hides = self.hides + 1 end
+    function button:SetDisabled(disabled) self.disabled = disabled end
     function button:Destroy() self.destroyed = true end
-    gearButton = button
+    spriteButtons[name] = button
+    if name == "SETTINGS" then gearButton = button end
     return button
   end },
   -- A radio: click(value) is the player picking a choice.
@@ -153,18 +162,21 @@ prettyui = {
       if notify ~= false then self.options.onChange(self, value) end
     end
     function box:click(value) if value ~= self.value then self:SetSelectedValue(value) end end
-    radio = box
+    -- Which setting it is, by its first choice.
+    if choices[1].value == "top" then cardRadio = box else radio = box end
     return box
   end },
-  -- The client's settings page's view: records its title and radio (see ui/gridsettings.lua).
+  -- The client's settings page's view: records its titles and radios, in
+  -- order (see ui/gridsettings.lua).
   SimpleView = { new = function(parent, options)
-    local view = { parent = parent, options = options }
-    function view:AddTitle(text) self.title = text end
+    local view = { parent = parent, options = options, titles = {}, choices = {}, radios = {}, controls = {} }
+    function view:AddTitle(text) self.titles[#self.titles + 1] = text end
     function view:AddRadioButton(choices, radioOptions)
-      self.choices, self.radio = choices, radioOptions
+      local index = #self.radios + 1
+      self.choices[index], self.radios[index] = choices, radioOptions
       local control = { value = radioOptions.selectedValue }
       function control:SetSelectedValue(value) self.value = value end
-      self.radioControl = control
+      self.controls[index] = control
       return control
     end
     return view
@@ -172,8 +184,8 @@ prettyui = {
   Window = { new = function(_, options)
     local window = { options = options, title = options.title, overlays = {} }
     window.root = { width = options.width, height = options.height, x = options.x, y = options.y }
-    window.minHeight = options.minHeight
-    window.resize = { minHeight = options.minHeight }
+    window.minWidth, window.minHeight = options.minWidth, options.minHeight
+    window.resize = { minWidth = options.minWidth, minHeight = options.minHeight }
     window.content = newComponent("Content")
     window.content.width = options.width - 16
     window.viewport = { height = options.height - CHROME }
@@ -183,17 +195,23 @@ prettyui = {
     function window.titleDrag:SetSize(w) self.width = w end
     window.titleText = newComponent("Text", window.root)
     -- The scroll area: under the title bar (32), inside the 8-wide borders.
+    -- As in PrettyUI, the content is as wide as the scroll area (its width
+    -- is the window's + a negative number, see grid.lua's pinScrollArea).
     if not noScrollArea then
       window._scroll = { root = newComponent("ScrollArea") }
       window._scroll.root:SetPos(8, 32)
-      function window._scroll:Refresh() self.refreshed = true end
+      function window._scroll:Refresh()
+        self.refreshed = true
+        if self.root.w ~= nil then window.content.width = window.root.width + self.root.w end
+      end
     end
     function window:SetContentHeight(h) self.contentHeight = h end
     function window:SetSize(w, h)
-      h = math.max(h, self.minHeight)             -- as PrettyUI's clamp
+      w, h = math.max(w, self.minWidth), math.max(h, self.minHeight)   -- as PrettyUI's clamp
       self.root.width, self.root.height = w, h
       self.viewport.height = h - CHROME
       self.content.width = w - 16
+      if self._scroll ~= nil then self._scroll:Refresh() end
     end
     function window:SetTitle(t) self.title = t end
     function window:Close() self.options.onClose(self); self.destroyed = true end
@@ -257,14 +275,15 @@ local function cellFor(world)
     if name.content == "w" .. world then return layer end
   end
 end
--- The card: the 80-tall Layer straight on the window (or in its content). Its
--- Texts in the order grid.lua makes them, by name; its outline Rectangle
--- and the badge's.
+-- The card: the first Layer made straight on the newest window (or, when
+-- it can't be pinned, in its content: made before the cells). Any height:
+-- it grows when its texts wrap. Its Texts in the order grid.lua makes
+-- them, by name; its outline Rectangle and the badge's.
 local function cardParts()
   local layer
+  local w = windows[#windows]
   for _, c in ipairs(components) do
-    local w = windows[#windows]
-    if c.kind == "Layer" and (c.parent == w.root or c.parent == w.content) and c.h == 80 then layer = c end
+    if layer == nil and c.kind == "Layer" and (c.parent == w.root or c.parent == w.content) then layer = c end
   end
   local names = { "world", "badge", "status", "place", "countdown", "place2", "place3" }
   local parts, texts, rectangles = {}, 0, {}
@@ -849,16 +868,19 @@ worldsCombo:Select("all", true)
 
 ---------------------------------------------------------------- settings page (ui/gridsettings.lua)
 -- The client hands us an empty layer; we fill it with a title and a radio
--- that calls grid.setLines.
+-- per setting, which call grid.setChoice.
 local gridsettings = require("ui/gridsettings")
 local settingsLayer = { width = 300, height = 200 }
-local settings = gridsettings.fillHub(settingsLayer, grid.lines(), grid.setLines)
+local settings = gridsettings.fillHub(settingsLayer, grid.choice, grid.setChoice)
 check("S1 on the client's layer, inside a margin", tostring(settings.parent == settingsLayer) .. "," .. settings.options.width, "true,284")
-check("S2 title", settings.title, "Cells")
-check("S3 choices", settings.choices[1].value .. "=" .. settings.choices[1].text .. "|" .. settings.choices[2].value .. "=" .. settings.choices[2].text,
+check("S2 titles", table.concat(settings.titles, ","), "Cells,World card")
+check("S3 choices", settings.choices[1][1].value .. "=" .. settings.choices[1][1].text .. "|" .. settings.choices[1][2].value .. "=" .. settings.choices[1][2].text,
   "two=Two lines|one=One line")
-check("S4 shows the saved choice", settings.radio.selectedValue, "one")
-local function pickLines(value) settings.radio.onChange(settings, value) end
+check("S3b card choices", settings.choices[2][1].value .. "," .. settings.choices[2][2].value .. "," .. settings.choices[2][3].value .. "=" .. settings.choices[2][3].text,
+  "top,left,right=Right of the grid")
+check("S4 shows the saved choices", settings.radios[1].selectedValue .. "," .. settings.radios[2].selectedValue, "one,top")
+local function pickLines(value) settings.radios[1].onChange(settings, value) end
+local function pickCardOnHub(value) settings.radios[2].onChange(settings, value) end
 
 -- The gear in the grid's title bar: on the window, anchored to its right
 -- edge, left of the close button.
@@ -893,8 +915,154 @@ gearButton.action()
 pickLines("two")                -- on the client's page, while the grid's page is open
 check("S14 client's choice shows on the grid's page", radio.value, "two")
 radio:click("one")              -- and back, on the grid's page
-check("S15 grid's choice shows on the client's page", settings.radioControl.value, "one")
+check("S15 grid's choice shows on the client's page", settings.controls[1].value, "one")
+check("S16 the page has the card's setting too, under the lines'", cardRadio.root.parent == gearPage and cardRadio.options.y > radio.options.y
+  and cardRadio.value, "top")
 gearButton.action()
+
+---------------------------------------------------------------- card side: a sidebar
+-- Above the grid, the card's first line has two arrows (dock left, dock
+-- right), left of the badge: the card's right edge is 8 + 6 = 14 from the
+-- window's (anchored right), then 8 + 32 + 6 = 46 for the badge, then
+-- 16-wide arrows 2 apart: -14 - 46 - 16 = -76, and -76 - 2 - 16 = -94.
+-- y = the card's top (38) + 7.
+local function dockShown()
+  local shown = {}
+  for _, name in ipairs({ "ARROW_LEFT", "ARROW_RIGHT", "ARROW_UP" }) do
+    local button = spriteButtons[name]
+    if button ~= nil and not button.root.hidden then shown[#shown + 1] = name .. "@" .. button.root.x .. "," .. button.root.y end
+  end
+  return table.concat(shown, " ")
+end
+local function cardLayerNow() return cardParts().world.parent end
+check("SB1 arrows above the grid", dockShown(), "ARROW_LEFT@-94,45 ARROW_RIGHT@-76,45")
+check("SB2 arrows on the window", spriteButtons.ARROW_LEFT.root.parent, window.root)
+check("SB3 arrows say what they do", spriteButtons.ARROW_LEFT.options.tooltip, "Show the card on the left")
+
+-- Dock left. The card: 240 wide at the top left (8 + 6, 32 + 6). The
+-- scroll area: right of it, 8 + 6 + 240 + 6 = 260 from the left edge, to
+-- the right border (8), from the title bar down: the cells get the whole
+-- height. The content is then 500 - 268 = 232 wide: a row of 220, one
+-- column of 220-wide cells. The toolbar is under the card, as wide as it:
+-- at 38 + 96 (the card, see SB11) + 6 = 140.
+window:SetSize(500, 400)
+spriteButtons.ARROW_LEFT.action()
+check("SB3b clicked arrow: tooltip hidden, disabled while hidden",
+  tostring(spriteButtons.ARROW_LEFT.tooltip.hides > 0) .. "," .. tostring(spriteButtons.ARROW_LEFT.disabled) .. ","
+  .. tostring(spriteButtons.ARROW_RIGHT.disabled), "true,true,false")
+local hidesBefore = spriteButtons.ARROW_LEFT.tooltip.hides
+grid.onLogic()
+check("SB3c its tooltip kept hidden on the next frames", spriteButtons.ARROW_LEFT.tooltip.hides, hidesBefore + 1)
+for _ = 1, 20 do grid.onLogic() end
+hidesBefore = spriteButtons.ARROW_LEFT.tooltip.hides
+grid.onLogic()
+check("SB3d then left alone", spriteButtons.ARROW_LEFT.tooltip.hides, hidesBefore)
+update()
+local sideCard = cardLayerNow()
+check("SB4 card on the left, fixed width", sideCard.x .. "," .. sideCard.y .. "," .. sideCard.w, "14,38,240")
+check("SB5 scroll area beside it, full height", area.x .. "," .. area.y .. "," .. area.w .. "," .. area.h, "260,32,-268,-40")
+check("SB6 toolbar under the card", sortCombo.root.x .. "," .. sortCombo.root.y .. "," .. sortCombo.root.w, "14,140,240")
+check("SB7 Tree under it, in the sidebar", treeButton().x .. "," .. tostring(treeButton().y > 140) .. "," .. treeButton().w, "14,true,240")
+check("SB8 one column of cells", cellFor(1).x .. "," .. cellFor(1).w, "6,220")
+check("SB9 saved", views[#views].card, "left")
+check("SB10 both settings pages show it", cardRadio.value .. "," .. settings.controls[2].value, "left,left")
+-- The card wraps its texts to 240 (224 for text): "Exact Location: East
+-- of the house portal in Rellekka" (312) takes 2 lines, so 80 + 16 = 96.
+-- It no longer pushes anything down.
+check("SB11 card wraps to the sidebar's width", sideCard.h, 96)
+-- Arrows: the card's right edge is 14 + 240 = 254 from the LEFT edge, so
+-- "move right" at 254 - 46 - 34 = 174 and "back to the top" at 192.
+check("SB12 sidebar arrows: other side, back to the top", dockShown(), "ARROW_RIGHT@174,45 ARROW_UP@192,45")
+
+-- The window can't be narrower than the sidebar and a column of cells:
+-- 260 + 8 + 12 + 179 (a cell with "Willow") + 18 (the scrollbar) = 477.
+check("SB13 minimum width for the sidebar and a column", window.minWidth .. "," .. window.resize.minWidth, "477,477")
+window:SetSize(300, 400)
+update()
+check("SB13b can't be made narrower", window.root.width, 477)
+-- Nor shorter than the sidebar (the card, the toolbar under it and the
+-- margins: 32 + 6 + 96 + 6 + toolbar + 6 + 8), or the settings page
+-- (32 + 10 + (22 + 44 + 10) + (22 + 66 + 10) + 8 = 224).
+local toolbarRows = treeButton().y + 20 - 140
+check("SB13c minimum height fits the sidebar", window.minHeight, math.max(224, 32 + 6 + 96 + 6 + toolbarRows + 6 + 8))
+window:SetSize(500, 400)
+update()
+
+-- Dock right: the card's left edge is 8 + 6 + 240 = 254 from the RIGHT
+-- edge (-254, anchored right); the scroll area keeps 254 + 6 = 260 on its
+-- right; the toolbar is back at 14.
+spriteButtons.ARROW_RIGHT.action()
+update()
+sideCard = cardLayerNow()
+check("SB14 card on the right", sideCard.x .. "," .. sideCard.y .. "," .. sideCard.w, "-254,38,240")
+check("SB15 scroll area left of it", area.x .. "," .. area.w, "8,-268")
+check("SB16 toolbar under the card (500 - 254)", sortCombo.root.x .. "," .. sortCombo.root.y .. "," .. sortCombo.root.w, "246,140,240")
+-- The card follows the right edge by itself (anchored); the toolbar is
+-- moved with it on the next frame, not the next update.
+window:SetSize(600, 400)
+grid.onLogic()
+check("SB16b toolbar follows a resize at once", sortCombo.root.x .. "," .. treeButton().x, "346,346")
+window:SetSize(500, 400)
+grid.onLogic()
+check("SB17 cells from the left", cellFor(1).x .. "," .. cellFor(1).w, "6,220")
+check("SB18 right-side arrows", dockShown(), "ARROW_LEFT@-94,45 ARROW_UP@-76,45")
+check("SB19 saved", views[#views].card, "right")
+
+-- Reset keeps the side; so does changing a filter.
+worldsCombo:Select("p2p", true)
+resetButton.action()
+update()
+check("SB20 filters and Reset keep the side", views[#views].card .. "," .. cardLayerNow().x, "right,-254")
+
+-- From the client's settings page: left again.
+pickCardOnHub("left")
+update()
+check("SB21 settings page moves it", cardLayerNow().x .. "," .. area.x .. "," .. cardRadio.value, "14,260,left")
+
+-- Restored from the save: the window opens with the sidebar.
+grid.destroy()
+grid.restoreView({ lines = "one", card = "left" })
+update()
+window = windows[#windows]
+area = window._scroll.root
+sortCombo, worldsCombo, infoCombo = toolbarCombos()
+check("SB22 opens with the saved side", cardLayerNow().x .. "," .. cardLayerNow().w .. "," .. area.x, "14,240,260")
+check("SB23 its arrows", dockShown(), "ARROW_RIGHT@174,45 ARROW_UP@192,45")
+
+-- Back to the top: as before the sidebar.
+spriteButtons.ARROW_UP.action()
+update()
+check("SB24 card back above the grid", cardLayerNow().x .. "," .. cardLayerNow().y .. "," .. cardLayerNow().w, "14,38,-28")
+check("SB25 scroll area full width again", area.x .. "," .. area.w, "8,-16")
+check("SB25b minimum width back to the grid's own", window.minWidth, 200)
+check("SB26 toolbar under the card", sortCombo.root.x .. "," .. sortCombo.root.y, "14,124")
+check("SB27 top arrows", dockShown(), "ARROW_LEFT@-94,45 ARROW_RIGHT@-76,45")
+check("SB28 saved", views[#views].card, "top")
+local oldArrow = spriteButtons.ARROW_UP
+grid.destroy()
+check("SB29 arrows removed with the window", oldArrow.destroyed, true)
+
+-- A PrettyUI without the arrow sprites: the grid opens without arrows,
+-- the side still works from the settings, and one line is logged.
+brokenArrows = true
+spriteButtons = {}
+logged = {}
+grid.restoreView({ lines = "one", card = "left" })
+update()
+window = windows[#windows]
+area = window._scroll.root
+check("SB30 grid open without arrows", tostring(grid.wantsOpen() and not window.destroyed) .. "," .. dockShown(), "true,")
+check("SB31 one error logged", #logged .. "|" .. string.sub(logged[1] or "", 1, 24), "1|[error] grid card arrows")
+check("SB32 the sidebar still works", cardLayerNow().x .. "," .. cardLayerNow().w .. "," .. area.x, "14,240,260")
+pickCardOnHub("top")
+update()
+check("SB33 and moves back from the settings", cardLayerNow().w .. "," .. area.x .. "," .. #logged, "-28,8,1")
+brokenArrows = false
+grid.destroy()
+grid.update(cells(NOW), NOW, 137)
+window = windows[#windows]
+area = window._scroll.root
+sortCombo, worldsCombo, infoCombo = toolbarCombos()
 
 ---------------------------------------------------------------- lines: two-line cells
 -- Picking "Two lines" on the settings page: the cells are built again, 34

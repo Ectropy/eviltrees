@@ -68,6 +68,7 @@ check("D1 default worlds", filters.defaults().worlds, "all")
 check("D1 default info", filters.defaults().info, "any")
 check("D1 default trees empty", #filters.defaults().trees, 0)
 check("D1 default two lines", filters.defaults().lines, "two")
+check("D1 default card above the grid", filters.defaults().card, "top")
 local d1, d2 = filters.defaults(), filters.defaults()
 d1.trees[1] = "oak"
 d1.sort = "latest"
@@ -122,6 +123,9 @@ check("N5 trees not a table", summary(filters.normalize({ trees = "oak" })), "wo
 check("N5 trees nil", summary(filters.normalize({ sort = "latest" })), "latest|all|any|")
 local saved = { sort = "latest", trees = { "oak", "oak" } }
 check("N7 lines kept", filters.normalize({ lines = "one" }).lines, "one")
+check("N8 card side kept", filters.normalize({ card = "left" }).card .. "," .. filters.normalize({ card = "right" }).card, "left,right")
+check("N8b bad card side: top", filters.normalize({ card = "bottom" }).card .. "," .. filters.normalize({ card = 2 }).card, "top,top")
+check("N8c card side is not a filter", filters.isFiltering(filters.normalize({ card = "left" })), false)
 check("N7 bad lines: default", filters.normalize({ lines = "three" }).lines .. "," .. filters.normalize({ lines = 1 }).lines, "two,two")
 local normalized = filters.normalize(saved)
 check("N6 returns a new table", normalized ~= saved, true)

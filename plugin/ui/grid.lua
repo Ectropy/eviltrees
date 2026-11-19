@@ -21,6 +21,14 @@
     grows taller for a long place; the toolbar and cells then move down. Under it, a toolbar sorts and filters the cells
     (ui/gridtoolbar.lua). The card and toolbar stay put: only the cells
     under them scroll.
+    For a wide, short grid the card can instead be a sidebar, a fixed
+    SIDEBAR_WIDTH wide, on the left or right of the cells, with the
+    toolbar under it, so the cells get the window's whole height
+    (prefs.card: "top", "left" or "right"). Chosen in the settings, or with
+    the arrows on the card's first line, as in EctoTrees: above the grid
+    the card has "dock left" and "dock right"; as a sidebar, "move to the
+    other side" and "back to the top". Where everything goes for each
+    choice is worked out in one place: geometry().
     core/overview.lua decides the words (overview.cells) and
     core/filters.lua which cells show, in which order; this file only
     draws them.
@@ -56,7 +64,10 @@
         pinScrollArea. The window's scroll area (viewport + scrollbar) is
         moved down by their height, and they sit in the space left above
         it. When the toolbar wraps onto more rows, the scroll area moves
-        down again and the window's minimum height grows.
+        down again and the window's minimum height grows. With the card
+        as a sidebar, the card and toolbar sit beside the scroll area
+        instead: it starts under the title bar and is narrowed (and moved
+        right, for a left sidebar) to leave room for them.
 
     Opening: main.lua calls grid.update once a second. While the player
     wants the grid open, update opens the window if it isn't there yet (so
@@ -113,6 +124,14 @@ local PAD = 6                   -- around everything
 -- The card (the selected world, at the top): see ui/worldcard.lua. Its
 -- height changes with its texts: see cardHeight in State.
 local TOOLBAR_GAP = 6           -- between the card and the toolbar
+-- The card as a sidebar (prefs.card "left" or "right"): always this wide,
+-- about as wide as the ribbon page's card, so its texts wrap the same way.
+local SIDEBAR_WIDTH = 240
+local SIDEBAR_GAP = 6           -- between the sidebar and the scroll area
+local SCROLLBAR_SPACE = 18      -- the scrollbar and its gap (PrettyUI's BAR_WIDTH 16 + BAR_GAP 2)
+-- The arrows on the card's first line that move it (see buildDock).
+local DOCK_SIZE = 16
+local DOCK_GAP = 2              -- between two arrows
 
 -- The filter notice under the last cell: "Showing 40 of 137 worlds. To
 -- see more, remove filters." ("remove filters." is a link).
@@ -167,6 +186,10 @@ local pin = nil             -- where PrettyUI put the scroll area, { left, top }
 local notice = nil          -- the filter notice's parts (buildNotice), while the window is open
 local hasToolbar = false    -- true while the toolbar is on screen and working
 local hasSettings = false   -- true while the settings gear and page are on the window
+local dock = nil            -- the card's arrows (buildDock): dock.left, dock.right, dock.top
+local dockSettle = 0        -- frames left to keep the arrows' tooltips hidden after the card moved
+local toolbarWindowWidth = nil  -- the window's width when the toolbar was last placed
+local lastShown, lastTotal = nil, nil   -- the toolbar's counts at the last update
 local toolbarHeight = 0     -- its rows' height at the last refresh
 local cardHeight = worldcard.MIN_HEIGHT     -- the card's height now (it grows when its texts wrap)
 local selectedWorld = nil   -- the clicked world, or nil
@@ -215,7 +238,7 @@ end
 -- The sort and filters
 -------------------------------------------------------------------------------
 
--- The prefs as they are saved: five strings, with the trees joined by
+-- The prefs as they are saved: six strings, with the trees joined by
 -- commas ("yew,magic", or "" for any tree). Plain strings avoid saving an
 -- empty table or a list through PersistentDB.
 local function savedForm(chosen)
@@ -225,11 +248,13 @@ local function savedForm(chosen)
         info = chosen.info,
         trees = table.concat(chosen.trees, ","),    -- trees.join(",")
         lines = chosen.lines,
+        card = chosen.card,
     }
 end
 
 local function viewKey(state)
     return state.sort .. "|" .. state.worlds .. "|" .. state.info .. "|" .. state.trees .. "|" .. state.lines
+        .. "|" .. state.card
 end
 
 -- Passes the prefs to main.lua (to save), but only when they changed.
@@ -596,8 +621,72 @@ local function findScrollArea()
     end
 end
 
--- The window space above the scroll area: the card, and the toolbar's rows.
+-- Where the card goes: prefs.card ("top", "left" or "right"), but always
+-- "top" when the card can't be pinned (it is then in the scrolling
+-- content, above the cells).
+local function cardSide()
+    if pin == nil then
+        return "top"
+    end
+    return prefs.card
+end
+
+-- Where everything goes on the window, for the card's side. Only used
+-- while the card is pinned (pin ~= nil). x values are from the window's
+-- left edge, y values from its top. Returns a table:
+--   side             "top", "left" or "right"
+--   cardX, cardY     the card's top-left corner; for "right", cardX is
+--                    from the window's RIGHT edge (cardFromRight = true)
+--   cardWidth        a fixed width, or nil: as wide as the window allows
+--   areaLeft         the scroll area's left edge
+--   areaRight        the space kept right of the scroll area
+--   toolbarX, toolbarY  where the toolbar's first row starts (from the
+--                    left edge, also for a right sidebar)
+--   toolbarWidth     how wide the toolbar's rows are
+--
+--   top:    [ card              ]     left:  [ card    ] [ cells    ]
+--           [ toolbar           ]            [ toolbar ] [          ]
+--           [ cells             ]                        [          ]
+local function geometry()
+    local side = cardSide()
+    local g = { side = side, cardY = pin.top + PAD, areaLeft = pin.left, areaRight = pin.left }
+    -- The sidebar, plus the window margin before it and the gap after it.
+    local sidebarSpace = PAD + SIDEBAR_WIDTH + SIDEBAR_GAP
+    if side == "left" then
+        g.cardX, g.cardWidth = pin.left + PAD, SIDEBAR_WIDTH
+        g.areaLeft = pin.left + sidebarSpace
+    elseif side == "right" then
+        -- A negative x measured from the right edge (see cardFromRight),
+        -- so the card follows the window's right edge when it is resized.
+        g.cardX, g.cardWidth, g.cardFromRight = -(pin.left + PAD + SIDEBAR_WIDTH), SIDEBAR_WIDTH, true
+        g.areaRight = pin.left + sidebarSpace
+    else
+        g.cardX = pin.left + PAD
+    end
+    -- The toolbar is always under the card, as wide as it. Above the
+    -- grid, that also lines it up with the cells (which start PAD inside
+    -- the scroll area).
+    g.toolbarY = pin.top + PAD + cardHeight + TOOLBAR_GAP
+    if side == "left" then
+        g.toolbarX, g.toolbarWidth = g.cardX, SIDEBAR_WIDTH
+    elseif side == "right" then
+        -- The toolbar is placed from the left edge, so it is worked out
+        -- from the window's width (and follows a resize: see followResize).
+        g.toolbarX, g.toolbarWidth = window.root.width + g.cardX, SIDEBAR_WIDTH
+    else
+        g.toolbarX = g.areaLeft + PAD
+        g.toolbarWidth = window.root.width - g.areaLeft - g.areaRight - 2 * PAD
+    end
+    return g
+end
+
+-- The window space above the scroll area: the card and the toolbar's
+-- rows, above the grid only. Beside a sidebar the scroll area starts right
+-- under the title bar, and the cells level with the card's top.
 local function pinnedSpace()
+    if cardSide() ~= "top" then
+        return 0
+    end
     local space = PAD + cardHeight
     if hasToolbar then
         space = space + TOOLBAR_GAP + toolbarHeight
@@ -605,43 +694,72 @@ local function pinnedSpace()
     return space
 end
 
--- Sets the window's minimum height, and makes the window taller if it is
--- now below it. window.minHeight (used by SetSize) and
--- window.resize.minHeight (used while the player drags an edge) are
--- PrettyUI's own fields (PrettyUI v1.3.0 internal); if they are missing,
--- the minimum stays MIN_HEIGHT and only the taller window remains.
-local function setMinimumHeight(height)
+-- Sets the window's minimum size, and makes the window bigger if it is
+-- now smaller. window.minWidth / minHeight (used by SetSize) and
+-- window.resize.minWidth / minHeight (used while the player drags an edge)
+-- are PrettyUI's own fields (PrettyUI v1.3.0 internal); if they are
+-- missing, the minimum stays MIN_WIDTH x MIN_HEIGHT and only the bigger
+-- window remains.
+local function setMinimumSize(width, height)
+    if window.minWidth ~= nil then
+        window.minWidth = width
+    end
     if window.minHeight ~= nil then
         window.minHeight = height
     end
-    if window.resize ~= nil and window.resize.minHeight ~= nil then
-        window.resize.minHeight = height
+    if window.resize ~= nil then
+        if window.resize.minWidth ~= nil then
+            window.resize.minWidth = width
+        end
+        if window.resize.minHeight ~= nil then
+            window.resize.minHeight = height
+        end
     end
-    if window.root.height < height then
-        window:SetSize(window.root.width, height)
+    if window.root.width < width or window.root.height < height then
+        window:SetSize(math.max(window.root.width, width), math.max(window.root.height, height))
     end
 end
 
--- Moves the scroll area down to just under the card and toolbar. Called
--- when the window opens and whenever the toolbar's height changes.
+-- Moves the scroll area to just under the card and toolbar (and beside a
+-- sidebar card). Called when the window opens and whenever the card's
+-- height, its side or the toolbar's height changes.
 local function pinScrollArea()
+    local g = geometry()
     local space = pinnedSpace()
     local area = window._scroll.root
     -- The anchors (1.0, 1.0) make the size "the window's size + these
     -- numbers", so it still follows resizes. The bottom border is as thick
     -- as the side ones (8), as in PrettyUI's window.lua.
-    area:SetPos(pin.left, pin.top + space)
-    area:SetSize(-2 * pin.left, -(pin.top + space) - pin.left, 1.0, 1.0)
-    window._scroll:Refresh()                -- lay the scrollbar out for the new height
-    setMinimumHeight(pin.top + space + MIN_SCROLL_HEIGHT + pin.left)
+    area:SetPos(g.areaLeft, pin.top + space)
+    area:SetSize(-(g.areaLeft + g.areaRight), -(pin.top + space) - pin.left, 1.0, 1.0)
+    window._scroll:Refresh()                -- lay the scrollbar out for the new size
+
+    -- Tall enough for a row of cells (and the scrollbar's arrows), and for
+    -- the settings page (it covers the window's inside). Beside a sidebar,
+    -- also for the whole card, and wide enough for one column of cells
+    -- next to it.
+    local width = MIN_WIDTH
+    local height = math.max(MIN_HEIGHT, pin.top + space + MIN_SCROLL_HEIGHT + pin.left,
+        pin.top + gridsettings.pageHeight() + pin.left)
+    if g.side ~= "top" then
+        -- The sidebar: the card, then the toolbar under it.
+        local sidebarHeight = PAD + cardHeight + PAD
+        if hasToolbar then
+            sidebarHeight = sidebarHeight + TOOLBAR_GAP + toolbarHeight
+        end
+        height = math.max(height, pin.top + sidebarHeight + pin.left)
+        width = math.max(width, g.areaLeft + g.areaRight + 2 * PAD + minCellWidth + SCROLLBAR_SPACE)
+    end
+    setMinimumSize(width, height)
 end
 
 -- The card (ui/worldcard.lua): built once when the window opens, then
--- filled in by updateHeader.
+-- filled in by updateHeader. A pinned card is put in its place by
+-- arrange, below.
 local function buildCard()
-    -- Pinned: straight on the window, in the space above the scroll area,
-    -- and the cells start at the top of the scroll area. Not pinned: at
-    -- the top of the scrolling content, with the cells under it.
+    -- Pinned: straight on the window, in the space above (or beside) the
+    -- scroll area, and the cells start at the top of the scroll area. Not
+    -- pinned: at the top of the scrolling content, with the cells under it.
     local parent, x, y = window.content, PAD, PAD
     cardHeight = worldcard.MIN_HEIGHT       -- a new card starts at its smallest
     gridTop = PAD + cardHeight + PAD
@@ -650,6 +768,88 @@ local function buildCard()
         gridTop = PAD
     end
     card = worldcard.new(parent, x, y)
+end
+
+local pickSide      -- defined with the toolbar below; declared here so the arrows can call it
+
+-- The arrows that move the card, as in EctoTrees' sidebar: PrettyUI
+-- SpriteButtons on the window (like the settings gear), in front of the
+-- card's first line, left of its P2P badge. Only for a pinned card. All
+-- three are built; placeDock shows the two that fit the card's side.
+local DOCK_BUTTONS = {
+    left = { sprite = "ARROW_LEFT", tooltip = "Show the card on the left" },
+    right = { sprite = "ARROW_RIGHT", tooltip = "Show the card on the right" },
+    top = { sprite = "ARROW_UP", tooltip = "Show the card above the grid" },
+}
+-- Which arrows show for each side, left to right.
+local DOCK_ORDER = {
+    top = { "left", "right" },
+    left = { "right", "top" },
+    right = { "left", "top" },
+}
+
+local function buildDock()
+    dock = {}
+    -- pairs walks a table's keys and values (like Object.entries in JS).
+    for side, look in pairs(DOCK_BUTTONS) do
+        dock[side] = prettyui.SpriteButton.new(window.root, look.sprite, function()
+            pickSide(side)
+        end, { size = DOCK_SIZE, tooltip = look.tooltip })
+        dock[side].root.hidden = true
+    end
+end
+
+-- Shows the arrows for the card's side (g from geometry), on the right
+-- end of the card's first line, and hides the third.
+local function placeDock(g)
+    if dock == nil then
+        return
+    end
+    for _, button in pairs(dock) do
+        button.root.hidden = true
+        -- Disabled as well as hidden, so a hidden arrow takes no mouse
+        -- events at all (PrettyUI makes a disabled SpriteButton
+        -- clickthrough). The arrow just clicked hides, so it never gets
+        -- its "mouse leave": hide its tooltip ourselves. pcall: if either
+        -- call is missing, the arrow keeps its look a moment.
+        pcall(function() button:SetDisabled(true) end)
+        pcall(function() button.tooltip:Hide() end)
+    end
+    -- Keep hiding the tooltips for a few frames (see grid.onLogic), in
+    -- case the game sends a late "mouse over" to the arrow just clicked.
+    dockSettle = 10
+    local shown = DOCK_ORDER[g.side]
+    -- The card's right edge: from the window's right edge (xAnchor 1.0)
+    -- for "top" and "right", from its left edge for "left".
+    local right, xAnchor = -(pin.left + PAD), 1.0
+    if g.side == "left" then
+        right, xAnchor = g.cardX + g.cardWidth, 0
+    end
+    local y = g.cardY + worldcard.BADGE_Y
+    for index, side in ipairs(shown) do
+        -- How many arrows from the right this one is (1 = the rightmost).
+        local fromRight = #shown - index + 1
+        local x = right - worldcard.CONTROLS_RIGHT - fromRight * DOCK_SIZE - (fromRight - 1) * DOCK_GAP
+        dock[side].root:SetPos(x, y, xAnchor, 0)
+        dock[side].root.hidden = false
+        pcall(function() dock[side]:SetDisabled(false) end)    -- takes clicks again
+    end
+end
+
+-- Hides the arrows' tooltips (called for a few frames after the card moved).
+local function hideDockTooltips()
+    for _, button in pairs(dock) do
+        pcall(function() button.tooltip:Hide() end)
+    end
+end
+
+local function destroyDock()
+    if dock ~= nil then
+        for _, button in pairs(dock) do
+            pcall(function() button:Destroy() end)
+        end
+    end
+    dock = nil
 end
 
 local resetFilters      -- defined with the toolbar below; declared here so the link can call it
@@ -712,9 +912,12 @@ local function contentWidth()
     return width
 end
 
--- How wide the card is on screen: its parent's width minus the margins
--- buildCard gave it. (The card needs it to wrap its texts.)
+-- How wide the card is on screen: the sidebar's width, or its parent's
+-- width minus its margins. (The card needs it to wrap its texts.)
 local function cardWidth()
+    if cardSide() ~= "top" then
+        return SIDEBAR_WIDTH
+    end
     if pin ~= nil then
         return window.root.width - 2 * (pin.left + PAD)
     end
@@ -849,28 +1052,68 @@ local function viewChanged()
     redraw("toolbar")
 end
 
--- The toolbar's onChange: group is "sort", "worlds", "info", "trees" or "lines".
+-- Puts the card, its arrows, the toolbar and the scroll area in their
+-- places for the card's side (see geometry). Called when the window
+-- opens, when the card's side changes, and when its height changes (above
+-- the grid, the toolbar and cells move with it). Does nothing while the
+-- card can't be pinned.
+local function arrange()
+    if pin == nil then
+        return
+    end
+    local g = geometry()
+    worldcard.place(card, g.cardX, g.cardY, g.cardWidth, g.cardFromRight)
+    placeDock(g)
+    if hasToolbar then
+        local ok, err = pcall(gridtoolbar.setOrigin, g.toolbarX, g.toolbarY)
+        if not ok then
+            dropToolbar(err)    -- also moves the scroll area
+            return
+        end
+    end
+    pinScrollArea()
+end
+
+-- The toolbar's onChange, and the settings pages' (ui/gridsettings.lua):
+-- group is "sort", "worlds", "info", "trees", "lines" or "card".
 local function setPref(group, value)
     -- A copy with one field changed (like { ...prefs, [group]: value } in
     -- JS), made valid by filters.normalize (unknown values fall back).
     local changed = { sort = prefs.sort, worlds = prefs.worlds, info = prefs.info, trees = prefs.trees,
-        lines = prefs.lines }
+        lines = prefs.lines, card = prefs.card }
     changed[group] = value
     prefs = filters.normalize(changed)
+    if group == "lines" or group == "card" then
+        -- Both settings pages show the new choice (it may have come from
+        -- the other page, or from the card's arrows).
+        pcall(gridsettings.showChoice, group, prefs[group])
+    end
     if group == "lines" then
         worldsKey = nil         -- one line or two: the cells are built again
-        pcall(gridsettings.showLines, prefs.lines)  -- both settings pages show the new choice
+    end
+    if group == "card" and window ~= nil then
+        arrange()               -- the card moves; the toolbar and cells make room
+        laidOutWidth = nil      -- place the cells again for their new width
     end
     viewChanged()
 end
 
+-- The card's arrows (assigned to the local declared above buildDock).
+pickSide = function(side)
+    local ok, err = pcall(setPref, "card", side)
+    if not ok then
+        log("[error] grid card side: " .. tostring(err))
+    end
+end
+
 -- Reset, and the notice's "remove filters." link: clears Worlds, Info and
--- Tree. The sort and lines are never reset. (Assigned to the local declared above
--- buildNotice.)
+-- Tree. The sort, the lines and the card's side are never reset.
+-- (Assigned to the local declared above buildNotice.)
 resetFilters = function()
     local cleared = filters.defaults()
     cleared.sort = prefs.sort
     cleared.lines = prefs.lines
+    cleared.card = prefs.card
     prefs = cleared
     if hasToolbar then
         local ok, err = pcall(gridtoolbar.showPrefs, prefs)
@@ -881,15 +1124,16 @@ resetFilters = function()
     viewChanged()
 end
 
--- Builds the toolbar under the card. host is what the window is on (the
--- game area): the toolbar draws its lists and popup there. Only when the
--- card is pinned: without that, the toolbar would have no fixed place.
+-- Builds the toolbar under the card (or beside it). host is what the
+-- window is on (the game area): the toolbar draws its lists and popup
+-- there. Only when the card is pinned: without that, the toolbar would
+-- have no fixed place.
 local function buildToolbar(host)
     if pin == nil then
         return
     end
-    local x, y = pin.left + PAD, pin.top + PAD + cardHeight + TOOLBAR_GAP
-    local ok, err = pcall(gridtoolbar.build, window, host, x, y, prefs,
+    local g = geometry()
+    local ok, err = pcall(gridtoolbar.build, window, host, g.toolbarX, g.toolbarY, prefs,
         { onChange = setPref, onReset = resetFilters })
     toolbarHeight = 0           -- known after the first refresh
     hasToolbar = ok
@@ -906,9 +1150,15 @@ local function refreshToolbar(shown, total)
     if not hasToolbar then
         return true
     end
-    -- The rows are as wide as the card.
-    local width = window.root.width - 2 * pin.left - 2 * PAD
-    local ok, result = pcall(gridtoolbar.refresh, width, prefs, shown, total)
+    lastShown, lastTotal = shown, total
+    -- Under the card, as wide as it. setOrigin does nothing unless the
+    -- place changed (a right sidebar moves when the window is resized).
+    local g = geometry()
+    toolbarWindowWidth = window.root.width
+    local ok, result = pcall(function()
+        gridtoolbar.setOrigin(g.toolbarX, g.toolbarY)
+        return gridtoolbar.refresh(g.toolbarWidth, prefs, shown, total)
+    end)
     if not ok then
         dropToolbar(result)
         return false
@@ -931,8 +1181,8 @@ local function attachSettings()
         left, top = pin.left, pin.top
     end
     local ok, err = pcall(gridsettings.attach, window, left, top, {
-        lines = function() return prefs.lines end,
-        onLines = function(value) setPref("lines", value) end,
+        get = function(group) return prefs[group] end,
+        onPick = setPref,
         onOpen = function()
             if hasToolbar then
                 pcall(gridtoolbar.closeLists)   -- an open list or popup would sit over the page
@@ -1039,18 +1289,13 @@ local function updateHeader(cells, now, total)
     end
 
     -- The card says how tall it is now. When that changes (a text wrapped
-    -- onto more or fewer lines), move what is under it.
+    -- onto more or fewer lines), move what is under it (or, beside a
+    -- sidebar, make sure the window is still tall enough for it).
     local height = worldcard.update(card, shown, now, "Click a world for details.", cardWidth())
     if height ~= cardHeight then
         cardHeight = height
         if pin ~= nil then
-            if hasToolbar then
-                local ok, err = pcall(gridtoolbar.setTop, pin.top + PAD + cardHeight + TOOLBAR_GAP)
-                if not ok then
-                    dropToolbar(err)
-                end
-            end
-            pinScrollArea()
+            arrange()
         else
             gridTop = PAD + cardHeight + PAD    -- the card is in the scrolling content
             laidOutWidth = nil                  -- place the cells again, lower or higher
@@ -1077,6 +1322,9 @@ render = function(cells, now, total)
     -- the cells are then placed again.
     if widest ~= typeWidth then
         setTypeWidth(widest)
+        if pin ~= nil then
+            pinScrollArea()     -- beside a sidebar, the window's minimum width follows the cells' width
+        end
     end
     updateHeader(cells, now, total)
 
@@ -1102,7 +1350,8 @@ end
 -- Forgets the window (after it was closed or destroyed).
 local function forgetWindow()
     window = nil
-    card, notice, pin = nil, nil, nil
+    card, notice, pin, dock = nil, nil, nil, nil
+    dockSettle, toolbarWindowWidth, lastShown, lastTotal = 0, nil, nil, nil
     views, viewsByWorld = {}, {}
     worldsKey, laidOutWidth, visibleKey, titleText = nil, nil, nil, nil
     hasToolbar, toolbarHeight = false, 0
@@ -1130,6 +1379,7 @@ local function createWindow()
             reportLayout()
             destroyToolbar()
             detachSettings()
+            destroyDock()
             forgetWindow()
         end,
         onPositionChange = function(_, x, y)
@@ -1138,12 +1388,20 @@ local function createWindow()
         end,
     })
     findScrollArea()
-    if pin ~= nil then
-        pinScrollArea()
-    end
     buildCard()
+    if pin ~= nil then
+        -- If the arrows can't be made (e.g. a PrettyUI without these
+        -- sprites), the grid goes on without them: the settings pages
+        -- still move the card.
+        local ok, err = pcall(buildDock)
+        if not ok then
+            log("[error] grid card arrows: " .. tostring(err) .. " (showing the grid without them)")
+            destroyDock()
+        end
+    end
     buildNotice()
     buildToolbar(parent)
+    arrange()                   -- the card, arrows, toolbar and scroll area in their places
     attachSettings()
     return true
 end
@@ -1153,6 +1411,7 @@ end
 local function destroyWindow()
     destroyToolbar()
     detachSettings()
+    destroyDock()
     if window ~= nil then
         pcall(function() window:Destroy() end)
     end
@@ -1185,12 +1444,14 @@ end
 
 -- The saved sort and filters from store.gridView (or nil), in the form
 -- onViewChange gives them: { sort = "soonest", worlds = "all",
--- info = "any", trees = "yew,magic", lines = "two" }. Anything odd or out of date falls
--- back to the default (filters.normalize). Call before the window opens.
+-- info = "any", trees = "yew,magic", lines = "two", card = "top" }.
+-- Anything odd or out of date falls back to the default
+-- (filters.normalize). Call before the window opens.
 function grid.restoreView(state)
     local saved = {}
     if type(state) == "table" then
-        saved.sort, saved.worlds, saved.info, saved.lines = state.sort, state.worlds, state.info, state.lines
+        saved.sort, saved.worlds, saved.info = state.sort, state.worlds, state.info
+        saved.lines, saved.card = state.lines, state.card
         saved.trees = {}
         if type(state.trees) == "string" then
             -- "[^,]+" matches each run of characters that aren't commas, so
@@ -1210,16 +1471,17 @@ function grid.setOnViewChange(fn)
     onViewChange = fn
 end
 
--- One or two lines per cell: "two" or "one" (see core/filters.lua, LINES).
--- For the client's settings page (ui/gridsettings.lua, fillHub).
-function grid.lines()
-    return prefs.lines
+-- A setting's choice, for the client's settings page (ui/gridsettings.lua,
+-- fillHub): grid.choice("lines") is "two" or "one", grid.choice("card")
+-- is "top", "left" or "right" (see core/filters.lua, LINES and CARD).
+function grid.choice(group)
+    return prefs[group]
 end
 
--- Sets the lines from the settings page: saved, and an open grid is built
--- again with the new cells.
-function grid.setLines(lines)
-    setPref("lines", lines)
+-- Sets a setting from the client's settings page: saved, and an open grid
+-- is drawn again with it (new cells, or the card moved).
+function grid.setChoice(group, value)
+    setPref(group, value)
 end
 
 -- True while the player wants the grid open (main.lua then builds the data).
@@ -1282,6 +1544,17 @@ function grid.onLogic()
             log("[error] grid settings: " .. tostring(err) .. " (gear removed)")
             detachSettings()
         end
+    end
+    if dockSettle > 0 and dock ~= nil then
+        dockSettle = dockSettle - 1
+        hideDockTooltips()
+    end
+    -- A right sidebar follows the window's right edge by itself (anchored),
+    -- but the toolbar under it is placed from the left: move it with the
+    -- window while the player resizes, not a second later.
+    if hasToolbar and window ~= nil and cardSide() == "right" and lastShown ~= nil
+        and window.root.width ~= toolbarWindowWidth then
+        refreshToolbar(lastShown, lastTotal)
     end
     if not hasToolbar then
         return

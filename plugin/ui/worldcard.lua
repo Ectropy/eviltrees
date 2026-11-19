@@ -25,6 +25,12 @@
     element.textContent in vanilla JS. core/overview.lua decides the words:
     update takes one of its cells.
 
+    The card is as wide as its parent (minus a margin) unless it is given
+    a fixed width with worldcard.place: the grid's card as a sidebar
+    (ui/grid.lua). The grid also puts arrows on the card's first line, to
+    move it; this file only says where there is room for them
+    (CONTROLS_RIGHT, BADGE_Y).
+
     Two anchor tricks are used (as in PrettyUI's own widgets):
       SetSize(w, h, 1.0, 0)   width = the parent's full width + w, so a
                               negative w leaves a margin and it follows resizes
@@ -53,11 +59,18 @@ local CARD_BG = 0x221F1BF5      -- a shade lighter than the grid's cells
 -- A card whose texts each fit on one line: 80. Cards start at this height.
 worldcard.MIN_HEIGHT = STATUS_Y + STATUS_LINE + LINE + LINE + BOTTOM
 
+-- For controls drawn over the card's first line (the grid's arrows): the
+-- y of the P2P badge, and how far from the card's right edge the free
+-- space ends (the badge, its margin, and a gap of 6 before it).
+worldcard.BADGE_Y = 7
+worldcard.CONTROLS_RIGHT = INNER + BADGE_WIDTH + 6
+
 -- Builds an empty card at (x, y) in parent, as wide as the parent minus x
 -- on both sides. Returns a table of its components; fill it with
 -- worldcard.update.
 function worldcard.new(parent, x, y)
-    local card = { x = x, height = worldcard.MIN_HEIGHT }
+    -- width = nil: as wide as the parent minus x on both sides (see applyFrame).
+    local card = { x = x, y = y, width = nil, fromRight = false, height = worldcard.MIN_HEIGHT }
     card.root = parts.new(ui.Layer, parent)
     card.root:SetPos(x, y)
     card.root:SetSize(-2 * x, card.height, 1.0, 0)  -- the same margin on both sides
@@ -78,12 +91,12 @@ function worldcard.new(parent, x, y)
     -- Right end of the first line: the P2P / F2P badge.
     local badgeX = -(INNER + BADGE_WIDTH)
     card.badgeBorder = parts.new(ui.Rectangle, card.root)
-    card.badgeBorder:SetPos(badgeX, 7, 1.0, 0)
+    card.badgeBorder:SetPos(badgeX, worldcard.BADGE_Y, 1.0, 0)
     card.badgeBorder:SetSize(BADGE_WIDTH, BADGE_HEIGHT)
     card.badgeBorder.fill = false
     card.badgeBorder.clickthrough = true
-    card.badge = parts.text(card.root, 0, 7, BADGE_WIDTH, BADGE_HEIGHT, ui.AlignMode.CENTRE)
-    card.badge:SetPos(badgeX, 7, 1.0, 0)
+    card.badge = parts.text(card.root, 0, worldcard.BADGE_Y, BADGE_WIDTH, BADGE_HEIGHT, ui.AlignMode.CENTRE)
+    card.badge:SetPos(badgeX, worldcard.BADGE_Y, 1.0, 0)
 
     -- Status: the icon, then the text (to the right of it when there is one).
     card.statusIcon = icons.new(card.root, INNER, STATUS_Y, ICON_SIZE)
@@ -131,6 +144,22 @@ local function lineCount(fontName, text, width)
     return math.max(1, math.min(MAX_LINES, math.floor(count)))
 end
 
+-- Puts the card's frame (card.root) where card.x / y / width / fromRight
+-- say, at its current height. width nil: as wide as the parent minus x on
+-- both sides, following the parent's resizes. A fixed width: that wide,
+-- and with fromRight = true, x is measured from the parent's right edge
+-- (a negative x then puts the card inside it).
+local function applyFrame(card)
+    if card.width == nil then
+        card.root:SetPos(card.x, card.y)
+        card.root:SetSize(-2 * card.x, card.height, 1.0, 0)
+    else
+        -- "fromRight and 1.0 or 0" is a ternary: fromRight ? 1.0 : 0 in JS.
+        card.root:SetPos(card.x, card.y, card.fromRight and 1.0 or 0, 0)
+        card.root:SetSize(card.width, card.height)
+    end
+end
+
 -- Stacks the status, place and countdown under each other, each as tall as
 -- the lines it needs at this card width, and sets the card's height.
 -- width is the card's width, or nil if unknown (then nothing wraps).
@@ -176,7 +205,17 @@ local function layout(card, width, statusX)
     y = place(card.countdown, INNER, y, countdownLines, LINE)
 
     card.height = y + BOTTOM
-    card.root:SetSize(-2 * card.x, card.height, 1.0, 0)
+    applyFrame(card)
+end
+
+-- Moves the card to (x, y) on its parent, width wide (nil: as wide as the
+-- parent minus x on both sides). fromRight = true measures x from the
+-- parent's right edge. The texts wrap to the new width on the next
+-- worldcard.update (give it the new width).
+function worldcard.place(card, x, y, width, fromRight)
+    card.x, card.y, card.width, card.fromRight = x, y, width, (fromRight == true)
+    card.layoutKey = nil        -- lay the texts out again on the next update
+    applyFrame(card)
 end
 
 -- Fills the card with one cell (from overview.cells or overview.currentCell).
