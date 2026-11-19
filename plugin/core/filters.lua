@@ -100,21 +100,14 @@ function filters.defaults()
     return { sort = "world", worlds = "all", info = "any", trees = {}, lines = "two", card = "top" }
 end
 
--- true if id is one of the entries' ids. ipairs walks an array in order,
--- like for...of; each step gives (index, entry), and "_" ignores the index.
-local function hasId(entries, id)
-    for _, entry in ipairs(entries) do
-        if entry.id == id then
-            return true
-        end
-    end
-    return false
-end
-
 -- A valid choice: the saved id if the list still has it, else the default.
+-- ipairs walks an array in order, like for...of; each step gives
+-- (index, entry), and "_" ignores the index.
 local function validId(entries, saved, default)
-    if hasId(entries, saved) then
-        return saved
+    for _, entry in ipairs(entries) do
+        if entry.id == saved then
+            return saved
+        end
     end
     return default
 end
