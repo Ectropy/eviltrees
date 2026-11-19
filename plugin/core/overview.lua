@@ -140,6 +140,28 @@ local function describePlace(record)
     return nil, nil
 end
 
+-- describePlace's answers, remembered per record, because working out a
+-- place (tidying hint text, measuring to every pin, searching every clue)
+-- runs every second for every world. Safe to remember forever: worldstate
+-- never edits a record, it stores a NEW record table on any change, so the
+-- same table always has the same place.
+-- The key is the record table itself. __mode = "k" makes the keys "weak",
+-- like a WeakMap in JS: an entry goes away by itself once nothing else
+-- holds its record, so old records don't pile up here.
+local placeCache = setmetatable({}, { __mode = "k" })
+
+-- describePlace, but each record's answer is worked out only once.
+-- table.unpack turns a list back into separate return values, like
+-- return [...saved] spread into four values.
+local function cachedPlace(record)
+    local saved = placeCache[record]
+    if saved == nil then
+        saved = { describePlace(record) }   -- { ... } collects all four results
+        placeCache[record] = saved
+    end
+    return table.unpack(saved, 1, 4)
+end
+
 -- One world's row. record may be nil (current world, nothing known yet).
 local function buildRow(number, record, now)
     local row = { world = number }
@@ -156,7 +178,7 @@ local function buildRow(number, record, now)
     end
     row.heading = table.concat(parts, " - ")
     -- Two results into two fields, like [row.place, row.places] = f() in JS.
-    row.place, row.places, row.cellPlace, row.placeExact = describePlace(record)
+    row.place, row.places, row.cellPlace, row.placeExact = cachedPlace(record)
 
     -- nextEvent returns three values: label, time, approximate.
     local label, at, approximate = worldstate.nextEvent(record, now)

@@ -209,10 +209,12 @@ check("L3 countdown moved down under them", long.countdown.y, 43 + 32 + 16)
 -- A line too long for the card still wraps. The page is 300 wide, so the
 -- texts have 300 - 16 - 16 = 268; no font can be measured in this fake
 -- game, so a text counts as 7 a letter: this hint is 50 letters = 350.
-store.worlds[204].hint = "close to the place where fairies gather in a ring"
+-- A NEW record, as worldstate makes on every change (overview remembers
+-- each record's place, so editing a saved record in place would not show).
+store.worlds[204] = { status = "none", spawnAt = 1793945263552, hint = "close to the place where fairies gather in a ring" }
 logic(50)
 check("L3b a long single hint wraps", card().place.maxLines .. "," .. card().place.h .. "," .. tostring(second.hidden), "2,32,true")
-store.worlds[204].hint = "north as the crow flies from Seers' Village"
+store.worlds[204] = { status = "none", spawnAt = 1793945263552, hint = "north as the crow flies from Seers' Village" }
 logic(50)
 check("L4 card taller", long.layer.h, 112)
 check("L5 view rebuilt under the taller card", tostring(#views > count) .. "," .. views[#views].options.y .. "," .. views[#views].options.height, "true,126,366")
