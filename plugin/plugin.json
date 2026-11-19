@@ -2,10 +2,10 @@
     "name": "Evil Trees",
     "version": "0.1.0",
     "contactEmailAddress": "ectropyarts@gmail.com",
-    "requiredDependencies": {},
-    "optionalDependencies": {
-        "prettyui": "prettyui"
+    "requiredDependencies": {
+        "prettyui": 6398181
     },
+    "optionalDependencies": {},
     "requiredPermissions": [],
     "optionalPermissions": [ "chatAccess" ],
     "urls": {},

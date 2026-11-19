@@ -56,10 +56,11 @@ local USE_RIBBON = true
 -- Show the debug section under the dashboard (records, tiles, recent captures).
 local SHOW_DEBUG = true
 
--- PrettyUI is an optional dependency (plugin.json): the client loads it first
--- and gives it to us as the global "prettyui". If it isn't there (not
--- installed or not enabled), reading the global just gives nil, and we fall
--- back to the plain debug panel so the plugin still works.
+-- PrettyUI is a required dependency (plugin.json: "prettyui": 6398181, its
+-- Plugin Hub ID): the client loads it first and gives it to us as the
+-- global "prettyui". We work with the Hub's version (1.2.2) and later ones
+-- (see ui/parts.lua, parts.new). If it is ever missing anyway, reading the
+-- global just gives nil, and we fall back to the plain debug panel.
 local USE_DASHBOARD = USE_RIBBON and prettyui ~= nil
 
 local safe = require("core/safe")

@@ -8,6 +8,12 @@
     After deploying, reload in the game console with:  prl <plugin-name>
     (or, if it was turned off by a world hop:  pon <plugin-name>)
 
+    PrettyUI: plugin\plugin.json names the Plugin Hub's PrettyUI by its ID
+    ("prettyui": 6398181), as a release must. A dev plugin can't use a Hub ID
+    (beta, 2026-11-18: prettyui came through empty), so the deployed copy is
+    changed to the dev folder ("prettyui": "prettyui"), which
+    scripts\install-prettyui.ps1 fills. -HubDependency keeps the Hub ID.
+
 .EXAMPLE
     .\scripts\deploy-plugin.ps1
     Deploys plugin\ as dev_plugins\evil-trees.
@@ -33,6 +39,9 @@ param(
 
     # Deploy the sprite lab (icon candidates) instead of the real plugin.
     [switch]$Sprites,
+
+    # Keep plugin.json's Hub ID for PrettyUI instead of the dev folder (see above).
+    [switch]$HubDependency,
 
     # The beta client's dev_plugins folder.
     [string]$DevPluginsPath = "C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins"
@@ -73,6 +82,22 @@ if (Test-Path $destination) {
     Remove-Item -Recurse -Force $destination
 }
 Copy-Item -Recurse $source $destination
+
+# The real plugin: point the deployed copy's PrettyUI dependency at the dev
+# folder (see the description at the top).
+if ($relative -eq "plugin" -and -not $HubDependency) {
+    $manifest = Join-Path $destination "plugin.json"
+    $text = [System.IO.File]::ReadAllText($manifest)
+    $hubId = '"prettyui":\s*6398181'
+    if ($text -match $hubId) {
+        $text = $text -replace $hubId, '"prettyui": "prettyui"'
+        # UTF-8 without a byte order mark, like the original.
+        [System.IO.File]::WriteAllText($manifest, $text, (New-Object System.Text.UTF8Encoding $false))
+        Write-Host "PrettyUI dependency: dev folder dev_plugins\prettyui (plugin\plugin.json keeps the Hub ID)"
+    } else {
+        Write-Warning "plugin.json has no '""prettyui"": 6398181' to change; deployed as is"
+    }
+}
 
 $files = (Get-ChildItem -Recurse -File $destination).Count
 Write-Host "Deployed $relative ($files files) to $destination"
