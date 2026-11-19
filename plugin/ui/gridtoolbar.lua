@@ -34,6 +34,7 @@
 
 local filters = require("core/filters")
 local treepicker = require("ui/treepicker")
+local parts = require("ui/parts")
 
 local gridtoolbar = {}
 
@@ -177,7 +178,7 @@ end
 
 -- The scrim: covers the whole window, hidden until a list or the popup opens.
 local function buildScrim()
-    scrim = prettyui.NewComponent(ui.Layer, window.root)
+    scrim = parts.new(ui.Layer, window.root)
     scrim.hidden = true                     -- first: it covers the whole window
     scrim:SetPos(0, 0)
     scrim:SetSize(0, 0, 1.0, 1.0)           -- (width, height, widthAnchor, heightAnchor): fill the window
@@ -217,7 +218,7 @@ end
 
 -- A one-line Text on the window.
 local function newText(alignHorizontal)
-    local text = prettyui.NewComponent(ui.Text, window.root)
+    local text = parts.new(ui.Text, window.root)
     text.font = id.Font[FONT]
     text.isShadowed = true
     text.alignHorizontal = alignHorizontal

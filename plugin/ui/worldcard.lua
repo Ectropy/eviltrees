@@ -58,7 +58,7 @@ worldcard.MIN_HEIGHT = STATUS_Y + STATUS_LINE + LINE + LINE + BOTTOM
 -- worldcard.update.
 function worldcard.new(parent, x, y)
     local card = { x = x, height = worldcard.MIN_HEIGHT }
-    card.root = prettyui.NewComponent(ui.Layer, parent)
+    card.root = parts.new(ui.Layer, parent)
     card.root:SetPos(x, y)
     card.root:SetSize(-2 * x, card.height, 1.0, 0)  -- the same margin on both sides
     card.root.clickthrough = true       -- nothing on the card takes the mouse
@@ -77,7 +77,7 @@ function worldcard.new(parent, x, y)
 
     -- Right end of the first line: the P2P / F2P badge.
     local badgeX = -(INNER + BADGE_WIDTH)
-    card.badgeBorder = prettyui.NewComponent(ui.Rectangle, card.root)
+    card.badgeBorder = parts.new(ui.Rectangle, card.root)
     card.badgeBorder:SetPos(badgeX, 7, 1.0, 0)
     card.badgeBorder:SetSize(BADGE_WIDTH, BADGE_HEIGHT)
     card.badgeBorder.fill = false

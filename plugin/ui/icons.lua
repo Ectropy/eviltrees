@@ -20,6 +20,8 @@
     turns them into pictures.
 ]]
 
+local parts = require("ui/parts")
+
 local icons = {}
 
 -- Icon word -> { sprite name, sprite ID from the dump }. The name is
@@ -88,7 +90,7 @@ function icons.new(parent, x, y, size)
     local slot = {}
     -- slot.sprite draws game sprites, slot.item draws item icons.
     for _, key in ipairs({ "sprite", "item" }) do
-        local component = prettyui.NewComponent(ui.Sprite, parent)
+        local component = parts.new(ui.Sprite, parent)
         component:SetPos(x, y)
         component:SetSize(size, size)
         component.rgba = 0xFFFFFFFF         -- white: the image's own colours

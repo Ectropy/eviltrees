@@ -889,5 +889,16 @@ check("L5 dead: skull", picture("dead", "willow"), "sprite 33098")
 check("L6 spawn: timer", picture("timer", nil), "sprite 10432")
 check("L7 nothing", picture(nil, nil), "nil nil")
 
+---------------------------------------------------------------- PrettyUI 1.2.2 (the Plugin Hub's)
+-- It has no prettyui.NewComponent, so parts.new calls Type.new(parent) itself.
+local parts = require("ui/parts")
+local newComponent = prettyui.NewComponent
+prettyui.NewComponent = nil
+local FakeType = { new = function(parent) return { madeBy = "Type.new", parent = parent } end }
+local made = parts.new(FakeType, "the parent")
+check("H1 without NewComponent: Type.new(parent)", made.madeBy .. "," .. made.parent, "Type.new,the parent")
+prettyui.NewComponent = newComponent
+check("H2 with NewComponent: PrettyUI's", parts.new(ui.Layer, "p").kind, "Layer")
+
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end
