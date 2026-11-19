@@ -9,7 +9,7 @@
 
     sampledata.generate(worldList, now, random) returns a table shaped like
     store.worlds ({ [104] = record, ... }). Each world gets a random state:
-    no intel, a hint only, a spawn timer (exact and "~"), a sapling, a full
+    no intel, a spawn timer (exact and "~", maybe with hints), a sapling, a full
     tree (lightning timed, or only "dies within"), or a dead tree with
     rewards. On top of that, what we know about it varies independently,
     as it does in real play:
@@ -40,8 +40,7 @@ local TREE_TYPES = { "tree", "oak", "willow", "maple", "yew", "magic", "elder" }
 -- kept high so the grid looks like a real session: plenty not scouted yet.
 local WEIGHTS = {
     { kind = "unknown", weight = 25 },
-    { kind = "hint", weight = 10 },          -- a hint, no spawn time
-    { kind = "spawn", weight = 20 },         -- exact spawn timer
+    { kind = "spawn", weight = 30 },         -- exact spawn timer (maybe with hints)
     { kind = "roughSpawn", weight = 5 },     -- "~" spawn timer
     { kind = "sapling", weight = 10 },
     { kind = "alive", weight = 15 },         -- lightning timed
@@ -53,20 +52,27 @@ local WEIGHTS = {
 -- at random. "tile" = seen there, "clue" = the spirit tree's sentence
 -- (only once the tree has spawned), "twoHints" / "hint" = hints heard,
 -- "nothing" = only a time (the activity tracker).
+-- Rules that keep the data possible:
+--   - Every record has a timer. A hint alone is never kept: the game only
+--     gives one while a spawn countdown is running, so a hint-only world
+--     (or a place with no countdown) can't happen.
+--   - A tree we saw (sapling, matured while watched, dying/dead) was seen
+--     at its tile, so those kinds always have one.
+--   - Only "roughAlive" (told by the spirit tree or tracker that a tree is
+--     up, never seen) can be placed by a clue or hints alone.
 local PLACE_CHOICES = {
-    hint = { "hint", "hint", "twoHints" },
     spawn = { "hint", "hint", "twoHints", "nothing" },
     roughSpawn = { "hint", "nothing" },
-    sapling = { "tile", "clue", "hint", "twoHints" },
-    alive = { "tile", "tile", "clue", "hint", "twoHints" },
+    sapling = { "tile" },
+    alive = { "tile" },
     roughAlive = { "clue", "hint", "twoHints" },
-    dead = { "tile", "clue", "hint" },
+    dead = { "tile" },
 }
 
 -- Chance (out of 100) that we know the tree's type, for each kind. A
--- sapling's type needs its inspect text (optional chat access); a tree
--- only heard about from the spirit tree often has no type either.
-local TYPE_KNOWN = { sapling = 50, alive = 75, roughAlive = 50, dead = 75 }
+-- sapling's type needs its inspect text (optional chat access). The type
+-- comes from seeing the tree, so a tree never seen (roughAlive) has none.
+local TYPE_KNOWN = { sapling = 50, alive = 75, roughAlive = 0, dead = 75 }
 
 -- One random entry of a list. #list is the list's length, and lists
 -- start at 1, so random(1, #list) picks any of them.
@@ -171,11 +177,7 @@ local function makeRecord(kind, now, random)
     end
     local record = { updatedAt = now }
 
-    if kind == "hint" then
-        record.status = "none"
-        addPlace(record, kind, random)
-
-    elseif kind == "spawn" or kind == "roughSpawn" then
+    if kind == "spawn" or kind == "roughSpawn" then
         -- Spawns 1 to 90 minutes from now. An exact timer reading gives a
         -- 1 min window; a rough one a 3 min window (shown with "~").
         record.status = "none"

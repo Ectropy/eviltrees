@@ -39,7 +39,7 @@ for _, cell in ipairs(cells) do
   if cell.eventLabel == "Dies within" then diesWithin = true end
   if cell.eventLabel == "Lightning in" then lightning = true end
 end
-for _, kind in ipairs({ "unknown", "none", "spawn", "sapling", "alive", "dead" }) do
+for _, kind in ipairs({ "unknown", "spawn", "sapling", "alive", "dead" }) do
   check("A2 has some " .. kind, (kinds[kind] or 0) > 0, true)
 end
 check("A3 some rough spawn timers (~)", roughSpawn, true)
@@ -104,6 +104,32 @@ for _, cell in ipairs(cells) do
   end
 end
 check("A6 no records with nothing to show", blank, 0)
+
+-- Impossible combinations, checked over many different random runs (each
+-- run uses the next numbers from the shared generator, so the data differs).
+local bad = {}
+local function flag(what) bad[what] = (bad[what] or 0) + 1 end
+for _ = 1, 30 do
+  for _, record in pairs(sampledata.generate(worlds.list, NOW, random)) do
+    local hasPlace = record.tileX ~= nil or record.locationClue ~= nil or record.hint ~= nil
+    -- Every record has a countdown; a hint or place alone can't happen.
+    if worldstate.nextEvent(record, NOW) == nil then flag("no timer") end
+    if record.status == "none" and record.spawnAt == nil then flag("none without spawn time") end
+    -- A tree we saw is at a tile we know (type, health, watched, dead).
+    local seen = record.status == "sapling" or record.matureSource == "watched" or record.status == "dead"
+    if seen and record.tileX == nil then flag("seen tree without tile") end
+    if record.treeType ~= nil and record.tileX == nil then flag("type without tile") end
+    if record.health ~= nil and record.tileX == nil then flag("health without tile") end
+    -- Health only exists for a full tree; a clue only once it has spawned.
+    if record.health ~= nil and record.status ~= "alive" then flag("health on a non-alive tree") end
+    if record.locationClue ~= nil and record.status == "none" then flag("clue before spawn") end
+    -- Only a tree that is up has a clue, hints come with a countdown.
+    if record.hint ~= nil and record.status == "dead" then flag("hint on a dead tree") end
+    if hasPlace == false and record.spawnSource ~= "tracker" then flag("no place and no tracker") end
+  end
+end
+for what, n in pairs(bad) do check("A11 impossible: " .. what .. " (" .. n .. "x)", 0, n) end
+check("A11 no impossible combinations", next(bad), nil)
 
 -- Every event is in the future (nothing starts at 0:00).
 local overdue = 0
