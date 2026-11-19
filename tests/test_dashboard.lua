@@ -183,7 +183,9 @@ check("R2 content back at once", card().world.content, "w204")
 ---------------------------------------------------------------- a long place wraps
 -- The card is the full view: nothing is cut off. A hint that leaves two
 -- places shows them on a line each, the second after "or". The card grows
--- by that line (16) to 96, and the view is built again 16 lower.
+-- by that line (16) to 96, and the view is built again 16 lower. The first
+-- place now starts with the label "Hint: " (42 letters = 294 > 268), so it
+-- wraps to 2 lines (32): everything under it moves down 16 more.
 store.worlds[204] = { status = "none", spawnAt = 1793945263552, hint = "north as the crow flies from Seers' Village" }
 count = #views
 logic(50)
@@ -194,11 +196,11 @@ for _, c in ipairs(components) do
   if c.kind == "Text" and c.parent == long.layer then cardTexts[#cardTexts + 1] = c end
 end
 local second, third = cardTexts[6], cardTexts[7]
-check("L1 first place on its own line", long.place.content .. "|" .. long.place.y, "East of the house portal in Rellekka|43")
+check("L1 first place on its own line", long.place.content .. "|" .. long.place.y, "Hint: East of the house portal in Rellekka|43")
 check("L2 second place under it, after \"or\"", second.content .. "|" .. second.y .. "|" .. tostring(second.hidden),
-  "or Northwest of Seers' Village bank|59|false")
+  "or Northwest of Seers' Village bank|75|false")
 check("L2b no third place", third.content .. "|" .. tostring(third.hidden), "|true")
-check("L3 countdown moved down under them", long.countdown.y, 43 + 32)
+check("L3 countdown moved down under them", long.countdown.y, 43 + 32 + 16)
 -- A line too long for the card still wraps. The page is 300 wide, so the
 -- texts have 300 - 16 - 16 = 268; no font can be measured in this fake
 -- game, so a text counts as 7 a letter: this hint is 50 letters = 350.
@@ -207,8 +209,8 @@ logic(50)
 check("L3b a long single hint wraps", card().place.maxLines .. "," .. card().place.h .. "," .. tostring(second.hidden), "2,32,true")
 store.worlds[204].hint = "north as the crow flies from Seers' Village"
 logic(50)
-check("L4 card taller", long.layer.h, 96)
-check("L5 view rebuilt under the taller card", tostring(#views > count) .. "," .. views[#views].options.y .. "," .. views[#views].options.height, "true,110,382")
+check("L4 card taller", long.layer.h, 112)
+check("L5 view rebuilt under the taller card", tostring(#views > count) .. "," .. views[#views].options.y .. "," .. views[#views].options.height, "true,126,366")
 store.worlds[204] = nil
 logic(50)
 check("L6 short again: card and view back", card().layer.h .. "," .. views[#views].options.y, "80,94")

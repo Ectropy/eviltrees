@@ -425,7 +425,7 @@ check("D1b card: world not in the list in body text", card.world.rgba, 0xE7D7B0F
 check("D3 card: beta world has no badge", card.badge.content .. "," .. tostring(card.badgeBorder.hidden), ",true")
 check("D4 card: status", card.status.content, "Evil willow - 45%")
 check("D5 card: status in the alive colour", card.status.rgba, 0x7CC04AFF)
-check("D6 card: place", card.place.content, "East of the house portal in Rellekka")
+check("D6 card: place", card.place.content, "Exact Location: East of the house portal in Rellekka")
 check("D7 card: strike, then death", card.countdown.content, "Lightning in 15m  -  Dies in 25m")
 check("D8 card: sky-blue outline on your world", card.border.rgba, 0x4FC3F7FF)
 check("D9 card: willow logs", card.item.object .. "," .. tostring(card.item.hidden), "1519,false")
@@ -498,7 +498,7 @@ for _, c in ipairs(components) do
 end
 -- (world, badge, status, place, countdown, place 2, place 3: in the order the card makes them)
 check("E8k two places: a line each", placeTexts[4].content .. "|" .. placeTexts[6].content,
-  "East of the house portal in Rellekka|or Northwest of Seers' Village bank")
+  "Hint: East of the house portal in Rellekka|or Northwest of Seers' Village bank")
 check("E8l second under the first, countdown under both, third hidden",
   placeTexts[4].y .. "," .. placeTexts[6].y .. "," .. tostring(placeTexts[6].hidden) .. "," .. placeTexts[5].y .. "," .. tostring(placeTexts[7].hidden),
   "43,59,false,75,true")
@@ -509,7 +509,7 @@ check("E8n hover text keeps them on one line",
 cellFor(6).tip.handlers.onMouseLeave(cellFor(6).tip)
 cellFor(6).hooks.click()
 check("E8o unselected: card and scroll area back", cardParts().place.content .. "," .. area.y,
-  "East of the house portal in Rellekka," .. areaBefore)
+  "Exact Location: East of the house portal in Rellekka," .. areaBefore)
 records[6] = nil
 
 -- A typed sapling says just "Elder" in its cell (the icon and colour say
@@ -793,9 +793,9 @@ sortCombo._Close = realClose
 -- 200 wide: rows of 200 - 28 = 172. No two controls fit side by side, so
 -- each gets a row and all stretch to 172 (Sort is squeezed to it).
 -- The card is 172 wide too, so its texts have 156 and wrap: the place
--- (36 letters, 216 wide) and the countdown (38 letters, 228 wide) each
--- need 2 lines. The card grows from 80 to 80 + 2 * 16 = 112, and the
--- toolbar and scroll area move down by those 32.
+-- ("Exact Location: " + 36 letters = 312 wide) and the countdown (38
+-- letters, 228 wide) each need 2 lines. The card grows from 80 to
+-- 80 + 2 * 16 = 112, and the toolbar and scroll area move down by those 32.
 -- 4 rows: 4 * 20 + 3 * 4 = 92, so the scroll area is at 32 + 118 + 6 + 92 = 248.
 window:SetSize(200, 250)
 update()

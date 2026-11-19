@@ -124,21 +124,24 @@ end
 -- places the hints leave (see location.forHints), else the newest hint
 -- itself. Returns three values: the text on one line ("A or B"), the
 -- same as a list with one entry per place ({ "A", "B" }), for the card,
--- which shows each on its own line, and a short form for a grid cell (the
--- same text, but a hint without "Hint: "). All nil if we know nothing.
+-- which shows each on its own line, a short form for a grid cell (the
+-- same text, but a hint without "Hint: "), and a fourth value: true when
+-- the place is exact (a tile, clue or one-place hint), false when it is
+-- only a hint. The list has no "Hint: " in it: the card adds the label
+-- ("Hint:" or "Exact Location:") itself. All nil if we know nothing.
 local function describePlace(record)
     local name = location.forRecord(record)
     if name ~= nil then
-        return name, { name }, name
+        return name, { name }, name, true
     end
     local candidates = location.forHints(record)
     if #candidates == 2 or #candidates == 3 then
         local joined = table.concat(candidates, " or ")     -- like candidates.join(" or ")
-        return joined, candidates, joined
+        return joined, candidates, joined, false
     end
     if record.hint ~= nil then
         local hint = capitalize(record.hint)
-        return "Hint: " .. hint, { "Hint: " .. hint }, hint
+        return "Hint: " .. hint, { hint }, hint, false
     end
     return nil, nil
 end
@@ -159,7 +162,7 @@ local function buildRow(number, record, now)
     end
     row.heading = table.concat(parts, " - ")
     -- Two results into two fields, like [row.place, row.places] = f() in JS.
-    row.place, row.places, row.cellPlace = describePlace(record)
+    row.place, row.places, row.cellPlace, row.placeExact = describePlace(record)
 
     -- nextEvent returns three values: label, time, approximate.
     local label, at, approximate = worldstate.nextEvent(record, now)
@@ -289,6 +292,10 @@ end
 --   health    "95%" or "50% or less" (alive trees only, or nil)
 --   cellPlace the place for a two-line cell: as place, but a hint without
 --             "Hint: " (no room to spare); nil if place is nil
+--   placeExact true if the place is exact, false if it is only a hint (the
+--             card labels them; cells don't mark them yet); nil if place is nil
+--   places    the place as a list, one per line on the card, with no "Hint: "
+--             in it (the card adds "Hint:" or "Exact Location:")
 --   status    "Evil willow - 45%", "Oak sapling", "No tree" (or nil: no intel)
 --   deathAt, deathApproximate
 --             when an alive tree dies (worldstate.deathTime), or nil

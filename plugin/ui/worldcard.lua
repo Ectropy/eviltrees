@@ -227,11 +227,20 @@ function worldcard.update(card, cell, now, emptyText, width)
     card.status.rgba = colours.KIND[cell.kind] or colours.MUTED
     -- The places, one per Text: "A", "or B", "or C". "cell.places or {}"
     -- is an empty list when there are none (like cell.places ?? [] in JS).
+    -- The first one gets the label: "Exact Location: X" when we
+    -- know the place, else "Hint: X".
     local places = cell.places or {}
+    local exact = (cell.placeExact == true)
     for index, text in ipairs(card.places) do
         local name = places[index] or ""
-        if index > 1 and name ~= "" then
-            name = "or " .. name
+        if name ~= "" then
+            if index > 1 then
+                name = "or " .. name
+            elseif exact then
+                name = "Exact Location: " .. name
+            else
+                name = "Hint: " .. name
+            end
         end
         text.content = name
     end

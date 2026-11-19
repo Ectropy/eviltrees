@@ -271,6 +271,11 @@ check("P1 two places: joined, and listed", placesOf({ status = "none", spawnAt =
   "East of the house portal in Rellekka or Northwest of Seers' Village bank / East of the house portal in Rellekka + Northwest of Seers' Village bank")
 check("P2 exact place: a list of one", placesOf({ status = "none", spawnAt = NOW, tileX = 2702, tileZ = 3640 }),
   "East of the house portal in Rellekka / East of the house portal in Rellekka")
+-- placeExact: true for an exact place (shown bold), false for a hint only.
+local function exactOf(record) return tostring(overview.cells({ [3] = record }, worldList, nil, NOW)[1].placeExact) end
+check("P4 tile: exact", exactOf({ status = "none", spawnAt = NOW, tileX = 2702, tileZ = 3640 }), "true")
+check("P5 two places from a hint: not exact", exactOf({ status = "none", spawnAt = NOW, hint = "north as the crow flies from Seers' Village" }), "false")
+check("P6 nothing known: nil", exactOf({ status = "none", spawnAt = NOW }), "nil")
 check("P3 nothing known: no list", placesOf({ status = "none", spawnAt = NOW }), "nil / nil")
 
 -- A sapling may be nurtured (it then grows up sooner), so its cell always
