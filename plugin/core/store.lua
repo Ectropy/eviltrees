@@ -15,11 +15,12 @@
                         open: { x, y, width, height, open = 1 or 0 }. (A
                         number, not true/false: we haven't checked how
                         PersistentDB saves booleans.)
-      "gridView"      - the grid's sort, filters and lines, as five strings:
+      "gridView"      - the grid's sort, filters and layout, as six strings:
                         { sort = "soonest", worlds = "all", info = "any",
-                        trees = "yew,magic", lines = "two" } (trees joined by commas, ""
-                        for any tree; plain strings avoid saving an empty
-                        table or a list). ui/grid.lua checks them on load.
+                        trees = "yew,magic", lines = "two", card = "top" }
+                        (trees joined by commas, "" for any tree; plain
+                        strings avoid saving an empty table or a list).
+                        ui/grid.lua checks them on load.
 
     Saving is "debounced": changes only mark the data as changed, and
     store.saveIfChanged() (called every few seconds by main.lua) writes it.
@@ -58,9 +59,8 @@ local INT_PREFIX = "int:"
 store.worlds = {}           -- [worldNumber] = record table
 store.lastWorld = nil       -- { number = 205, seenAt = <unix ms> } or nil
 store.gridWindow = nil      -- { x =, y =, width =, height =, open = 1 } or nil
-store.gridView = nil        -- { sort =, worlds =, info =, trees =, lines = } (all strings) or nil
+store.gridView = nil        -- { sort =, worlds =, info =, trees =, lines =, card = } (all strings) or nil
 store.lastSavedAt = nil     -- unix ms of the most recent save this session
-store.loadedCount = 0       -- how many world records were loaded at start-up
 
 local changed = false
 
@@ -116,17 +116,17 @@ function store.markChanged()
     changed = true
 end
 
--- Reads everything from PersistentDB. Returns the number of world records loaded.
+-- Reads everything from PersistentDB.
 function store.load()
     local savedVersion = safe.try(function() return PersistentDB:GetInt("schemaVersion") end)
     if savedVersion == nil then
         devlog.print("[store] no saved data yet")
-        return 0
+        return
     end
     if savedVersion > SCHEMA_VERSION then
         -- Saved by a newer version of the plugin; don't guess at its format.
         log("[store] saved data is from a newer plugin version; starting empty")
-        return 0
+        return
     end
 
     local savedList = restoreIntegers(safe.try(function() return PersistentDB:GetStructuredData("worlds") end) or {})
@@ -136,11 +136,11 @@ function store.load()
         savedList = {}
     end
     store.worlds = {}
-    store.loadedCount = 0
+    local count = 0
     for _, record in ipairs(savedList) do
         if type(record) == "table" and type(record.world) == "number" then
             store.worlds[record.world] = record
-            store.loadedCount = store.loadedCount + 1
+            count = count + 1
         end
     end
 
@@ -148,8 +148,7 @@ function store.load()
     store.gridWindow = restoreIntegers(safe.try(function() return PersistentDB:GetStructuredData("gridWindow") end))
     store.gridView = safe.try(function() return PersistentDB:GetStructuredData("gridView") end)   -- strings only
 
-    devlog.print("[store] loaded", store.loadedCount, "world records")
-    return store.loadedCount
+    devlog.print("[store] loaded", count, "world records")
 end
 
 -- Writes everything to PersistentDB right away. nowMs is the current time

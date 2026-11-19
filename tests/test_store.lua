@@ -49,7 +49,8 @@ store.worlds = {}
 store.lastWorld = nil
 store.gridWindow = nil
 store.gridView = nil
-check("loaded count", store.load(), 1)
+store.load()
+check("record loaded", store.worlds[204] ~= nil, true)
 check("grid window kept", store.gridWindow and store.gridWindow.width, 762)
 check("grid window open flag", store.gridWindow and store.gridWindow.open, 1)
 local view = store.gridView or {}
@@ -82,7 +83,8 @@ check("lastWorld number", store.lastWorld.number, 205)
 disk.schemaVersion = 3
 disk.worlds = throughDb({ { world = 9, status = "none", spawnAt = 1793945263552 } })
 store.worlds = {}
-check("v3 loads", store.load(), 1)
+store.load()
+check("v3 loads", store.worlds[9] ~= nil, true)
 check("v3 time is the rounded value", store.worlds[9].spawnAt, 1793945239552)
 
 print(string.format("%d passed, %d failed", passes, failures))
