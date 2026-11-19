@@ -311,12 +311,26 @@ local function refreshPanel()
     local model = overview.build(store.worlds, currentWorld.number, now, worlds.total(store.worlds))
     if usingDashboard() then
         -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
+        -- Made before the counts below change, so the debug lines stay real.
+        local lines = SHOW_DEBUG and debugLines(model) or nil
+        if sampleWorlds ~= nil then
+            -- The "All worlds (n / total)" button counts what the grid
+            -- shows, sample included. A world record table has no
+            -- length (#), so count its keys with pairs.
+            local shown = gridWorlds()
+            local scouted = 0
+            for _ in pairs(shown) do
+                scouted = scouted + 1
+            end
+            model.scouted = scouted
+            model.total = worlds.total(shown)
+        end
         -- The world you're on, as the grid would show it (for the card).
         -- byNumber[nil] is just nil, and "entry and entry.members" is nil
         -- for a world that isn't in our list (like entry?.members in JS).
         local entry = worlds.byNumber[currentWorld.number]
         local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
-        dashboard.update(model, cell, now, SHOW_DEBUG and debugLines(model) or nil)
+        dashboard.update(model, cell, now, lines)
     else
         debugPanel.show(debugLines(model))
     end
