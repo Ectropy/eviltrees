@@ -22,8 +22,8 @@
 
 .EXAMPLE
     .\scripts\install-prettyui.ps1 -Hub
-    Installs the PrettyUI the Plugin Hub gave this client (1.2.2 on 2026-11-18;
-    GitHub has no tag for it), from its zip in plugins\6398181. Install it from
+    Installs the PrettyUI the Plugin Hub gave this client, from its zip in
+    plugins\6398181 (the plugin needs 1.3.0 or later). Install it from
     the Hub first. Use this to test Evil Trees against what players will have.
 #>
 param(

@@ -394,7 +394,7 @@ local function buildView(cell)
     -- Everything inside follows it: the rectangles fill the cell, and the
     -- texts use the anchor trick from buildCard (width = the cell's
     -- width + a negative number), so a wider cell needs no changes here.
-    view.root = parts.new(ui.Layer, window.content)
+    view.root = prettyui.NewComponent(ui.Layer, window.content)
     view.root:SetSize(minCellWidth, cellHeight)
     view.root.clickthrough = false
     view.background = parts.rectangle(view.root, true, CELL_BG)
@@ -871,7 +871,7 @@ local function buildNotice()
 
     -- "or": if the game can't measure text, guess 6 per letter.
     notice.linkWidth = math.ceil(textWidth(LINK_TEXT) or #LINK_TEXT * 6) + 2
-    notice.link = parts.new(ui.Layer, window.content)
+    notice.link = prettyui.NewComponent(ui.Layer, window.content)
     notice.link:SetSize(notice.linkWidth, NOTICE_HEIGHT)
     notice.link.clickthrough = false
     notice.link.hidden = true

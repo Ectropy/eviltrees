@@ -58,9 +58,10 @@ local SHOW_DEBUG = true
 
 -- PrettyUI is a required dependency (plugin.json: "prettyui": 6398181, its
 -- Plugin Hub ID): the client loads it first and gives it to us as the
--- global "prettyui". We work with the Hub's version (1.2.2) and later ones
--- (see ui/parts.lua, parts.new). If it is ever missing anyway, reading the
--- global just gives nil, and we fall back to the plain debug panel.
+-- global "prettyui". We need PrettyUI 1.3.0 or later (we make every
+-- component with prettyui.NewComponent). If it is ever missing anyway,
+-- reading the global just gives nil, and we fall back to the plain debug
+-- panel.
 local USE_DASHBOARD = USE_RIBBON and prettyui ~= nil
 
 local safe = require("core/safe")

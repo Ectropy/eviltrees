@@ -42,7 +42,7 @@
         whenever it has grown. While a drag is going on (window.dragFeedback
         is set) the Layer covers the whole screen on purpose, so it is left
         alone. window.titleDrag and window.dragFeedback are PrettyUI's own
-        (PrettyUI 1.2.2 and 1.3.0 internals): without them the gear is still
+        (PrettyUI 1.3.0 internals): without them the gear is still
         drawn, but the title bar may take its clicks.
       - The page is a Layer on the window with a solid background, in front
         of the card, toolbar and cells, so it hides them and takes the
@@ -164,7 +164,7 @@ end
 -- Builds the page, hidden. left / top: where the window's inside starts
 -- (its side border, and the title bar's height).
 local function buildPage(left, top)
-    local root = parts.new(ui.Layer, window.root)
+    local root = prettyui.NewComponent(ui.Layer, window.root)
     root.hidden = true
     root:SetPos(left, top)
     root:SetSize(-2 * left, -top - left, 1.0, 1.0)  -- (width, height, anchors): the window's inside
@@ -210,7 +210,7 @@ local function buildGear()
         end
     end, { size = GEAR_SIZE, x = GEAR_X, y = GEAR_Y, xAnchor = 1.0, tooltip = "Settings" })
 
-    underline = parts.new(ui.Rectangle, window.root)
+    underline = prettyui.NewComponent(ui.Rectangle, window.root)
     underline:SetPos(GEAR_X, UNDERLINE_Y, 1.0)
     underline:SetSize(GEAR_SIZE, 2)
     underline.fill = true

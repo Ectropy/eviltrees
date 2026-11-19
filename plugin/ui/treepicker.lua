@@ -22,7 +22,6 @@
 ]]
 
 local filters = require("core/filters")
-local parts = require("ui/parts")
 
 local treepicker = {}
 
@@ -68,7 +67,7 @@ local buttonX, buttonY, buttonHeight = 0, 0, 0  -- where place put the button
 
 -- A Rectangle filling its parent. fill = false draws just the outline.
 local function newRectangle(parent, fill, colour)
-    local rectangle = parts.new(ui.Rectangle, parent)
+    local rectangle = prettyui.NewComponent(ui.Rectangle, parent)
     rectangle:SetSize(0, 0, 1.0, 1.0)       -- (width, height, widthAnchor, heightAnchor): fill the parent
     rectangle.fill = fill
     rectangle.rgba = colour
@@ -78,11 +77,11 @@ end
 
 -- The button: the native dropdown frame, and our text over it.
 local function buildButton(options)
-    button = parts.new(ui.Layer, window.root)
+    button = prettyui.NewComponent(ui.Layer, window.root)
     button:SetSize(1, options.height)       -- the real size comes from treepicker.place
     button.clickthrough = false             -- it takes the mouse
 
-    local frame = parts.new(ui.ComboField, button)
+    local frame = prettyui.NewComponent(ui.ComboField, button)
     -- Size it first: in the lab, a frame left at the game's default size
     -- showed up as a stray empty box.
     frame:SetSize(0, 0, 1.0, 1.0)
@@ -91,7 +90,7 @@ local function buildButton(options)
 
     -- The anchor trick: SetSize(w, h, 1.0, 0) makes the width "the
     -- button's width + w", so the text follows when the button stretches.
-    label = parts.new(ui.Text, button)
+    label = prettyui.NewComponent(ui.Text, button)
     label:SetPos(TEXT_X, options.textY)
     label:SetSize(-(TEXT_X + ARROW_SPACE), options.height, 1.0, 0)
     label.font = id.Font[FONT]              -- t[name] is t.name with the name in a variable, as in JS
@@ -137,7 +136,7 @@ local function buildPopup(options)
     }
     -- categoryID "auto": PrettyUI picks free component IDs on the game area
     -- (see its "Component IDs" docs), as for the window itself.
-    popup.root = parts.new(ui.Layer, host, { categoryID = "auto" })
+    popup.root = prettyui.NewComponent(ui.Layer, host, { categoryID = "auto" })
     popup.root.hidden = true                -- first: it sits at 0,0 until placePopup runs
     popup.root:SetSize(popup.width, popup.height)
     popup.root.clickthrough = false         -- clicks on it don't reach the window behind
