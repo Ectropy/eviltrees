@@ -480,16 +480,6 @@ local function checkTrackerLogin()
     useTrackerReading(result.reading, result.loginEarliest, result.loginLatest)
 end
 
--- The tracker's variables changed mid-game (not seen so far, but if the
--- server does it, the new values describe right now).
-tracker.setOnLiveChange(function(reading)
-    local now = clock.now()
-    if currentWorld.number == nil or now == nil then
-        return              -- mid-hop: the login reading will cover it
-    end
-    useTrackerReading(reading, now, now)
-end)
-
 -- Logging in, hopping, logging out. Leaving the game is saved straight
 -- away (a hop turns dev plugins off in the beta), so that after a restart
 -- the tracker knows the login came after this moment.
@@ -666,12 +656,10 @@ Event.ServerLogic.Subscribe("evilTrees", safe.handler("ServerLogic", function()
     end
 end))
 
--- Game variables changing: the clock's minute variable, the examine text,
--- and the activity tracker's evil tree variables.
+-- Game variables changing: the clock's minute variable and the examine text.
 Event.VarTransmit.Subscribe("evilTrees", safe.handler("VarTransmit", function(event)
     clock.onVarTransmit(event)
     examine.onVarTransmit(event)
-    tracker.onVarTransmit(event)
 end))
 
 -- Game objects (locs) appearing, disappearing and animating: evil trees.

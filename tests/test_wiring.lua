@@ -218,13 +218,11 @@ server(5)                -- the world is read a few ticks after logging in
 logic(1)
 check("M10 tracker timer", store.worlds[204].spawnSource, "tracker")
 check("M10 tracker: no tree", store.worlds[204].status, "none")
--- An unchanged value sent again is not a new reading; a real change is.
+-- The tracker is only read at login: a change sent later is ignored.
 game.varbits[-20747] = 0
 game.varbits[-20746] = 1
-handlers.VarTransmit({ var = { id = -20746, typeName = "VarPlayer" }, oldValue = 1, newValue = 1 })
-check("M11 unchanged ignored", store.worlds[204].status, "none")
 handlers.VarTransmit({ var = { id = -20746, typeName = "VarPlayer" }, oldValue = 0, newValue = 1 })
-check("M11 tree up mid-game", store.worlds[204].status, "alive")
+check("M11 mid-game change ignored", store.worlds[204].status, "none")
 
 PluginShutdown()
 check("M4 saved worlds", type(saved.worlds), "table")
@@ -233,7 +231,6 @@ check("M4 log has merges", saved.captureLog ~= nil and string.find(saved.capture
 check("M4 log shows replacement", saved.captureLog ~= nil and string.find(saved.captureLog, "(replaced sapling3)", 1, true) ~= nil, true)
 check("M10 log shows the skipped start-up", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker skipped: login time unknown (reloaded without leaving the game)", 1, true) ~= nil, true)
 check("M10 log shows the reading", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker: spawn in 38m (login ", 1, true) ~= nil, true)
-check("M11 log shows tree up", saved.captureLog ~= nil and string.find(saved.captureLog, "activity tracker: tree up", 1, true) ~= nil, true)
 check("M9 log shows the alert", saved.captureLog ~= nil and string.find(saved.captureLog, "activity alert: spawn in 5m", 1, true) ~= nil, true)
 check("M5 no errors", #errors, 0)
 for _, e in ipairs(errors) do print(e) end

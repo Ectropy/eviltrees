@@ -25,8 +25,6 @@
 
     main.lua calls tracker.takeLoginReading() once the world is known and
     the clock runs; the result goes to worldstate.applyTracker.
-    If the variables ever change while we play (not seen so far), the
-    callback from setOnLiveChange gets the new reading.
 ]]
 
 local safe = require("core/safe")
@@ -43,11 +41,9 @@ local MAX_LOGIN_WINDOW_MS = 5 * 60000
 --   { at = <ms> }              we saw it happen
 --   { after = <ms or nil> }    plugin started in game; it was after this
 local pendingLogin = nil
-local onLiveChange = nil            -- function(reading), set by main.lua
 
 -- Reads both variables. Returns { minutes = 52, alive = false }, or nil if
--- the game won't give them to us. var.VarPlayer.FromID(id) is how the probe
--- read them (by id; reading varbits by name is untested).
+-- the game won't give them to us.
 function tracker.read()
     local minutes = safe.try(function() return var.VarPlayer.FromID(TIME_VARBIT_ID).value end)
     local alive = safe.try(function() return var.VarPlayer.FromID(ALIVE_VARBIT_ID).value end)
@@ -55,11 +51,6 @@ function tracker.read()
         return nil
     end
     return { minutes = minutes, alive = alive == 1 }
-end
-
--- Registers the function to call if the variables change mid-game.
-function tracker.setOnLiveChange(callback)
-    onLiveChange = callback
 end
 
 -- Called once at start-up. inGame: are we already logged in? leftAt: when
@@ -111,22 +102,6 @@ function tracker.takeLoginReading(now)
         return { skipped = "variables not readable" }
     end
     return { reading = reading, loginEarliest = earliest, loginLatest = latest }
-end
-
--- Event.VarTransmit handler. Only a real change counts: an unchanged value
--- sent again would otherwise look like a fresh reading.
-function tracker.onVarTransmit(event)
-    local varId = event.var and event.var.id
-    if varId ~= TIME_VARBIT_ID and varId ~= ALIVE_VARBIT_ID then
-        return
-    end
-    if event.oldValue == event.newValue or pendingLogin ~= nil then
-        return                      -- login values are handled by takeLoginReading
-    end
-    local reading = tracker.read()
-    if reading ~= nil and onLiveChange ~= nil then
-        onLiveChange(reading)
-    end
 end
 
 return tracker
