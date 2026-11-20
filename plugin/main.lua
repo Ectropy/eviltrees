@@ -307,8 +307,8 @@ end
 -- Redraws the world grid (if wanted), then the dashboard. Called once a second.
 local function refreshPanel()
     local now = clock.now()
+    local shown = gridWorlds()      -- merged once, used by the grid and the button
     if grid.wantsOpen() then
-        local shown = gridWorlds()
         grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now)
     end
     if not usingDashboard() or not dashboard.isOpen() then
@@ -319,7 +319,7 @@ local function refreshPanel()
     local lines = SHOW_DEBUG and debugLines(scoutedCount(store.worlds)) or nil
     -- The "All worlds (n / 137)" button counts what the grid shows,
     -- sample included (gridWorlds is store.worlds without a sample).
-    local scouted = scoutedCount(gridWorlds())
+    local scouted = scoutedCount(shown)
     -- The world you're on, as the grid would show it (for the card).
     -- byNumber[nil] is just nil, and "entry and entry.members" is nil
     -- for a world that isn't in our list (like entry?.members in JS).
@@ -478,9 +478,9 @@ end
 -- away (a hop turns dev plugins off in the beta), so that after a restart
 -- the tracker knows the login came after this moment.
 local function onGameStateChanged(event)
-    currentWorld.onGameStateChanged(event)
-    tracker.onGameStateChanged(event, clock.now())
     local now = clock.now()
+    currentWorld.onGameStateChanged(event)
+    tracker.onGameStateChanged(event, now)
     if event.newState ~= GameState.GAME and store.lastWorld ~= nil and now ~= nil then
         store.lastWorld.leftAt = now
         store.saveNow(now)
