@@ -83,6 +83,7 @@
 
 local overview = require("core/overview")
 local filters = require("core/filters")
+local worlds = require("data/worlds")
 local colours = require("ui/colours")
 local icons = require("ui/icons")
 local parts = require("ui/parts")
@@ -193,7 +194,7 @@ local lastShown, lastTotal = nil, nil   -- the toolbar's counts at the last upda
 local toolbarHeight = 0     -- its rows' height at the last refresh
 local cardHeight = worldcard.MIN_HEIGHT     -- the card's height now (it grows when its texts wrap)
 local selectedWorld = nil   -- the clicked world, or nil
-local lastCells, lastNow, lastTotal = nil, nil, nil   -- the latest update's data
+local lastCells, lastNow = nil, nil   -- the latest update's data
 local titleText = nil
 local sampleMode = false    -- showing made-up data (core/sampledata.lua): say so in the title
 local onLayoutChange = nil  -- function(state), set by main.lua
@@ -358,7 +359,7 @@ local function redraw(what)
     if window == nil or lastCells == nil then
         return
     end
-    local ok, err = pcall(render, lastCells, lastNow, lastTotal)
+    local ok, err = pcall(render, lastCells, lastNow)
     if not ok then
         log("[error] grid " .. what .. ": " .. tostring(err))
     end
@@ -1267,7 +1268,7 @@ local function updateView(view, cell, now)
 end
 
 -- The title, and the card: the clicked world, else the one you're on.
-local function updateHeader(cells, now, total)
+local function updateHeader(cells, now)
     local scouted = 0
     local shown = nil
     for _, cell in ipairs(cells) do
@@ -1279,7 +1280,8 @@ local function updateHeader(cells, now, total)
         end
     end
 
-    local title = "Evil Trees - " .. scouted .. " / " .. total .. " scouted"
+    -- Out of the live worlds only: beta worlds are on the grid for testing.
+    local title = "Evil Trees - " .. scouted .. " / " .. worlds.count .. " scouted"
     if sampleMode then
         title = title .. " (sample)"     -- short: the title bar cuts off long titles
     end
@@ -1303,10 +1305,9 @@ local function updateHeader(cells, now, total)
     end
 end
 
--- Draws the latest data. cells from overview.cells, now the time (or nil),
--- total the number of worlds tracked.
-render = function(cells, now, total)
-    lastCells, lastNow, lastTotal = cells, now, total
+-- Draws the latest data. cells from overview.cells, now the time (or nil).
+render = function(cells, now)
+    lastCells, lastNow = cells, now
     if keyOf(cells) ~= worldsKey then
         buildViews(cells)
     end
@@ -1326,11 +1327,11 @@ render = function(cells, now, total)
             pinScrollArea()     -- beside a sidebar, the window's minimum width follows the cells' width
         end
     end
-    updateHeader(cells, now, total)
+    updateHeader(cells, now)
 
     -- Which cells show, in which order. The toolbar's count ("40 / 137")
-    -- is out of every cell, so it can be more than the title's total (a
-    -- beta world you're on with no intel yet, or a world not in our list).
+    -- is out of every cell, so it can be more than the title's 137 (a
+    -- beta world, or a world not in our list).
     local visible = filters.apply(cells, activePrefs())
     if not refreshToolbar(#visible, #cells) then
         visible = filters.apply(cells, activePrefs())   -- the toolbar just failed: show every world
@@ -1511,7 +1512,7 @@ function grid.setSampleMode(on)
 end
 
 -- Called about once a second by main.lua. cells from overview.cells.
-function grid.update(cells, now, total)
+function grid.update(cells, now)
     if not wantOpen then
         return
     end
@@ -1519,7 +1520,7 @@ function grid.update(cells, now, total)
         if window == nil and not createWindow() then
             return              -- no game area yet; try again next second
         end
-        render(cells, now, total)
+        render(cells, now)
     end)
     if not ok then
         -- Something is wrong (e.g. a PrettyUI version without a call we

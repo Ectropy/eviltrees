@@ -371,14 +371,14 @@ grid.setOnLayoutChange(function(state) states[#states + 1] = state end)
 grid.restoreView({ lines = "one" })
 
 ---------------------------------------------------------------- closed
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("A1 closed by default", #windows, 0)
 check("A2 not wanted", grid.wantsOpen(), false)
 
 ---------------------------------------------------------------- restored open
 grid.restore({ x = 10, y = 20, width = 500, height = 400, open = 1 })
 check("B1 wanted after restore", grid.wantsOpen(), true)
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 local window = windows[1]
 check("B2 window opened", window ~= nil, true)
 check("B3 at the saved place", window.options.x .. "," .. window.options.y, "10,20")
@@ -454,10 +454,10 @@ check("D10 card: status after the icon", card.status.x, 8 + 18 + 4)
 -- data a second later, and the unchanged status is not written again,
 -- while the countdown (which did change) is.
 card.status.content, card.countdown.content = "untouched", "untouched"
-grid.update(cells(NOW + 1000), NOW + 1000, 137)
+grid.update(cells(NOW + 1000), NOW + 1000)
 check("D11 card: unchanged status not set again", card.status.content, "untouched")
 check("D12 card: changed countdown set", card.countdown.content, "Lightning in 14m 59s  -  Dies in 24m 59s")
-grid.update(cells(NOW), NOW, 137)       -- back to NOW for the checks below
+grid.update(cells(NOW), NOW)       -- back to NOW for the checks below
 card.status.content = "Evil willow - 45%"   -- undo the mark
 
 -- The card and toolbar are pinned. The toolbar's rows are 500 - 16 - 12
@@ -498,7 +498,7 @@ check("E6 still open in the saved state", states[#states].open, 1)
 -- (872 - 3 * 3) // 4 = 215. (Measured from "0" instead of the widest
 -- digit, cells would be narrower, and all 7 would fit on one row.)
 window:SetSize(900, 400)
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("E7 reflowed: 4 columns", cellFor(6).y .. "," .. cellFor(204).x .. "," .. cellFor(204).y, "27,442,27")
 check("E8 cells re-stretched", cellFor(1).w, 215)
 
@@ -506,18 +506,18 @@ check("E8 cells re-stretched", cellFor(1).w, 215)
 -- (875 // 140 = 6 columns of (872 - 5 * 3) // 6 = 142). Then it comes back.
 local willow = records[204].treeType
 records[204].treeType = nil
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("E8b no types: narrower cells, 6 columns", cellFor(1).w .. "," .. cellFor(6).y, "142,6")
 check("E8c no types: the word is gone", select(3, textsOf(cellFor(204))).content, "")
 records[204].treeType = willow
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("E8d types again: wider cells", cellFor(1).w, 215)
 
 -- A hint that leaves two places: the card shows them on a line each, the
 -- second after "or", and grows by that line (80 -> 96). The scroll area
 -- moves down with it; the hover text keeps them on one line.
 records[6] = { status = "none", spawnAt = NOW + 50 * MINUTE, hint = "north as the crow flies from Seers' Village" }
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 local areaBefore = area.y
 cellFor(6).hooks.click()
 local twoPlaces = lastComponent(function(c) return c.kind == "Layer" and c.parent == window.root and c.h == 96 end)
@@ -546,7 +546,7 @@ records[6] = nil
 -- says nothing in its cell.
 records[5] = { status = "sapling", treeType = "elder", spawnAt = NOW - 3 * MINUTE }
 records[6] = { status = "sapling", spawnAt = NOW - 3 * MINUTE }
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 local _, _, saplingWord = textsOf(cellFor(5))
 check("E8e typed sapling: its type, in the sapling colour", saplingWord.content .. "," .. string.format("%X", saplingWord.rgba), "Elder,F0DC5AFF")
 check("E8f untyped sapling: no type text", select(3, textsOf(cellFor(6))).content, "")
@@ -561,17 +561,17 @@ records[5], records[6] = nil, nil
 -- are at least 137 + 18 + 6 = 161: 875 // 164 = 5 columns of
 -- (872 - 12) // 5 = 172. With the willow back, 4 columns of 215 again.
 records[204].treeType = "oak"
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("E8i a shorter word on show: narrower cells", cellFor(1).w .. "," .. cellFor(5).y .. "," .. cellFor(6).y, "172,6,27")
 records[204].treeType = willow
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("E8j the wider word again", cellFor(1).w, 215)
 -- The toolbar now fits on one row (609 of 872): the scroll area moves up.
 check("E9 toolbar on one row, scroll area moved up", area.y .. "," .. treeButton().y, (32 + 86 + 6 + 20) .. ",124")
 
 ---------------------------------------------------------------- ticking
 local before = #components
-grid.update(cells(NOW + 61000), NOW + 61000, 137)
+grid.update(cells(NOW + 61000), NOW + 61000)
 check("F1 no new components on update", #components, before)
 check("F2 countdown ticks down", select(2, textsOf(cellFor(2))).content, "43m")
 
@@ -615,10 +615,10 @@ check("I2b dropdowns (and their lists) removed", combos[1].destroyed and combos[
 check("I2c tree popup removed", popupRoot().destroyed and checkboxes.destroyed, true)
 check("I2d popup overlay unregistered", next(windows[1].overlays), nil)
 check("I2e context unregistered", contexts[1].unregistered, true)
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("I3 stays closed", #windows, 1)
 grid.toggle()
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("I4 toggled open again", #windows, 2)
 
 ---------------------------------------------------------------- shutdown keeps it wanted
@@ -635,7 +635,7 @@ noScrollArea = true
 local realConfig = config
 config = nil
 local combosBefore = #combos
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("M1 window opened anyway", #windows, 3)
 check("M1b no toolbar without a pinned card (and no error)", #combos .. "," .. #logged, combosBefore .. ",0")
 card = cardParts()
@@ -655,7 +655,7 @@ grid.destroy()
 ---------------------------------------------------------------- broken PrettyUI
 local realWindowNew = prettyui.Window.new
 prettyui.Window.new = function() error("no Window in this PrettyUI") end
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 check("K1 error logged", string.find(logged[#logged] or "", "[error] grid", 1, true) ~= nil, true)
 check("K2 stops trying", grid.wantsOpen(), false)
 prettyui.Window.new = realWindowNew
@@ -678,11 +678,11 @@ local views = {}
 grid.setOnViewChange(function(state) views[#views + 1] = state end)
 grid.restore({ x = 10, y = 20, width = 500, height = 400, open = 1 })
 logged = {}
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 window = windows[#windows]
 area = window._scroll.root
 sortCombo, worldsCombo, infoCombo = toolbarCombos()
-local function update() grid.update(cells(NOW), NOW, 137) end
+local function update() grid.update(cells(NOW), NOW) end
 
 check("T0 no errors", #logged, 0)
 check("T1 all worlds by number", shownWorlds(), "1,2,3,4,5,6,204")
@@ -1069,7 +1069,7 @@ update()
 check("SB33 and moves back from the settings", cardLayerNow().w .. "," .. area.x .. "," .. #logged, "-28,8,1")
 brokenArrows = false
 grid.destroy()
-grid.update(cells(NOW), NOW, 137)
+grid.update(cells(NOW), NOW)
 window = windows[#windows]
 area = window._scroll.root
 sortCombo, worldsCombo, infoCombo = toolbarCombos()
@@ -1132,7 +1132,7 @@ check("X2 tree ticks restored, in list order", table.concat(checkboxes.options.s
 check("X3 Tree button", treeLabel().content, "Tree: Yew, Magic")
 check("X4 restored filter applied", shownWorlds(), "")
 savedCount = #views
-grid.update(cells(NOW + 1000), NOW + 1000, 137)
+grid.update(cells(NOW + 1000), NOW + 1000)
 check("X5 restoring saves nothing", #views, savedCount)
 infoCombo:Select("any", true)
 check("X6 saved form", views[#views].sort .. "|" .. views[#views].worlds .. "|" .. views[#views].info .. "|" .. views[#views].trees,

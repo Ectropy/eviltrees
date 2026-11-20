@@ -208,16 +208,16 @@ local function otherWorldLines(maxLines)
     return lines
 end
 
--- How many worlds have a record ("scouted"), and how many worlds there
--- are, for the "All worlds (n / 137)" button and the debug section. A world
--- table has no length (#: its keys are world numbers, not 1, 2, 3...), so
--- count its keys with pairs.
-local function worldCounts(records)
+-- How many worlds have a record ("scouted"), for the "All worlds (n / 137)"
+-- button and the debug section (the 137 is worlds.count). A world table
+-- has no length (#: its keys are world numbers, not 1, 2, 3...), so count
+-- its keys with pairs.
+local function scoutedCount(records)
     local scouted = 0
     for _ in pairs(records) do
         scouted = scouted + 1
     end
-    return { scouted = scouted, total = worlds.total(records) }
+    return scouted
 end
 
 -- Shortens long text so a panel line doesn't get too wide.
@@ -229,8 +229,8 @@ local function shorten(text, maxLength)
 end
 
 -- The debug text: clock, saving, this world's full record, other worlds,
--- recent captures. counts is worldCounts(store.worlds).
-local function debugLines(counts)
+-- recent captures. scouted is scoutedCount(store.worlds).
+local function debugLines(scouted)
     local worldText = "unknown"
     if currentWorld.number ~= nil then
         worldText = tostring(currentWorld.number)
@@ -269,7 +269,7 @@ local function debugLines(counts)
             .. "  |  saved " .. savedText,
         "v" .. VERSION .. "  |  prev " .. previousText .. "  |  chat " .. (chat.hasAccess() and "on" or "off"),
         "This world: " .. shorten(describeRecord(store.worlds[currentWorld.number or -1]), 110),
-        "Scouted " .. counts.scouted .. " / " .. counts.total .. " worlds. Other worlds:",
+        "Scouted " .. scouted .. " / " .. worlds.count .. " worlds. Other worlds:",
     }
     for _, line in ipairs(otherWorldLines(MAX_OTHER_WORLDS)) do
         lines[#lines + 1] = shorten(line, 110)
@@ -313,23 +313,23 @@ local function refreshPanel()
     local now = clock.now()
     if grid.wantsOpen() then
         local shown = gridWorlds()
-        grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now, worlds.total(shown))
+        grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now)
     end
     if not usingDashboard() or not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
     -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
     -- The debug lines count the real records only.
-    local lines = SHOW_DEBUG and debugLines(worldCounts(store.worlds)) or nil
-    -- The "All worlds (n / total)" button counts what the grid shows,
+    local lines = SHOW_DEBUG and debugLines(scoutedCount(store.worlds)) or nil
+    -- The "All worlds (n / 137)" button counts what the grid shows,
     -- sample included (gridWorlds is store.worlds without a sample).
-    local counts = worldCounts(gridWorlds())
+    local scouted = scoutedCount(gridWorlds())
     -- The world you're on, as the grid would show it (for the card).
     -- byNumber[nil] is just nil, and "entry and entry.members" is nil
     -- for a world that isn't in our list (like entry?.members in JS).
     local entry = worlds.byNumber[currentWorld.number]
     local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
-    dashboard.update(counts, cell, now, lines)
+    dashboard.update(scouted, cell, now, lines)
 end
 
 -- Without a working PrettyUI the ribbon page shows this one line instead
