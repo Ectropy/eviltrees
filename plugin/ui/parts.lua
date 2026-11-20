@@ -2,9 +2,9 @@
     ui/parts.lua
     ------------
     Small building blocks made of plain game components, used by the
-    grid's cells (ui/grid.lua), the world card (ui/worldcard.lua) and the
-    grid's settings: a Rectangle that fills its parent, and a one-line
-    Text. Components come from PrettyUI's NewComponent.
+    grid's cells (ui/grid.lua), the world card (ui/worldcard.lua), and the
+    grid's toolbar and settings: a Rectangle that fills its parent, and a
+    one-line Text. Components come from PrettyUI's NewComponent.
 ]]
 
 local parts = {}

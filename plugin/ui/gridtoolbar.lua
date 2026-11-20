@@ -34,6 +34,7 @@
 
 local filters = require("core/filters")
 local colours = require("ui/colours")
+local parts = require("ui/parts")
 local treepicker = require("ui/treepicker")
 
 local gridtoolbar = {}
@@ -49,7 +50,6 @@ local MIN_CONTROL_WIDTH = 70    -- a control is never squeezed narrower than thi
 local COUNT_WIDTH = 60          -- the gold "40 / 137"
 local RESET_WIDTH = 56
 local COUNT_GAP = 4             -- between the count and Reset
-local FONT = "MUSEO_SANS_11PT_REGULAR"
 
 -- Each control's natural width (narrower only if the window is).
 local WIDTHS = {
@@ -201,7 +201,7 @@ local function buildCombo(name, selectedId)
     end
     combos[name] = prettyui.ComboBox.new(window.root, {
         width = WIDTHS[name], height = ROW_HEIGHT,
-        font = id.Font[FONT],
+        font = id.Font[parts.FONT],         -- the same small font as the cells
         entryHeight = ROW_HEIGHT,
         maxVisibleEntries = #entries,       -- show them all, no scrolling
         entries = entries,
@@ -215,24 +215,12 @@ local function buildCombo(name, selectedId)
     })
 end
 
--- A one-line Text on the window.
-local function newText(alignHorizontal)
-    local text = prettyui.NewComponent(ui.Text, window.root)
-    text.font = id.Font[FONT]
-    text.isShadowed = true
-    text.alignHorizontal = alignHorizontal
-    text.alignVertical = ui.AlignMode.CENTRE
-    text.maxLines = 1
-    text.clickthrough = true
-    text.content = ""
-    return text
-end
-
 -- The count and Reset, hidden until something is filtered.
 local function buildCountAndReset()
+    -- A one-line Text (ui/parts.lua), placed and sized by the layout.
     -- BOTTOMRIGHT puts the text on the right, next to Reset (the game's
     -- align modes are shared by both directions).
-    count = newText(ui.AlignMode.BOTTOMRIGHT)
+    count = parts.text(window.root, 0, 0, 1, ROW_HEIGHT, ui.AlignMode.BOTTOMRIGHT)
     count.rgba = colours.GOLD
     count.hidden = true
     countText = ""

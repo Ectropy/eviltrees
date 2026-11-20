@@ -23,6 +23,7 @@
 
 local filters = require("core/filters")
 local colours = require("ui/colours")
+local parts = require("ui/parts")
 
 local treepicker = {}
 
@@ -30,7 +31,6 @@ local treepicker = {}
 -- Look (sizes in interface units, colours 0xRRGGBBAA)
 -------------------------------------------------------------------------------
 
-local FONT = "MUSEO_SANS_11PT_REGULAR"  -- the same font as the dropdowns' text
 local TEXT_X = 8                -- the text's left margin, as the dropdowns' (their contentMargin)
 local ARROW_SPACE = 24          -- the frame's arrow on the right (PrettyUI's combo button width)
 local POPUP_PAD = 6             -- inside the popup, around the tick boxes
@@ -65,16 +65,6 @@ local buttonX, buttonY, buttonHeight = 0, 0, 0  -- where place put the button
 -- Building
 -------------------------------------------------------------------------------
 
--- A Rectangle filling its parent. fill = false draws just the outline.
-local function newRectangle(parent, fill, colour)
-    local rectangle = prettyui.NewComponent(ui.Rectangle, parent)
-    rectangle:SetSize(0, 0, 1.0, 1.0)       -- (width, height, widthAnchor, heightAnchor): fill the parent
-    rectangle.fill = fill
-    rectangle.rgba = colour
-    rectangle.clickthrough = true
-    return rectangle
-end
-
 -- The button: the native dropdown frame, and our text over it.
 local function buildButton(options)
     button = prettyui.NewComponent(ui.Layer, window.root)
@@ -88,19 +78,12 @@ local function buildButton(options)
     frame.clickthrough = true
     frame.stylesheetID = id.StyleSheet.COMBO_DEFAULT
 
-    -- The anchor trick: SetSize(w, h, 1.0, 0) makes the width "the
-    -- button's width + w", so the text follows when the button stretches.
-    label = prettyui.NewComponent(ui.Text, button)
-    label:SetPos(TEXT_X, options.textY)
+    -- A one-line Text in the dropdowns' font (ui/parts.lua). The anchor
+    -- trick: SetSize(w, h, 1.0, 0) makes the width "the button's width +
+    -- w", so the text follows when the button stretches.
+    label = parts.text(button, TEXT_X, options.textY, 0, options.height)
     label:SetSize(-(TEXT_X + ARROW_SPACE), options.height, 1.0, 0)
-    label.font = id.Font[FONT]              -- t[name] is t.name with the name in a variable, as in JS
-    label.isShadowed = true
-    label.alignHorizontal = ui.AlignMode.TOPLEFT
-    label.alignVertical = ui.AlignMode.CENTRE
-    label.maxLines = 1                      -- too long: cut off with "..."
-    label.clickthrough = true
     label.rgba = TEXT_COLOUR
-    label.content = ""
     labelText = ""
 
     -- Subscribe(hook, id, fn): the id lets several handlers share one hook.
@@ -140,8 +123,8 @@ local function buildPopup(options)
     popup.root.hidden = true                -- first: it sits at 0,0 until placePopup runs
     popup.root:SetSize(popup.width, popup.height)
     popup.root.clickthrough = false         -- clicks on it don't reach the window behind
-    newRectangle(popup.root, true, POPUP_BG)
-    newRectangle(popup.root, false, colours.FRAME)
+    parts.rectangle(popup.root, true, POPUP_BG)
+    parts.rectangle(popup.root, false, colours.FRAME)
     popup.checks = prettyui.CheckboxButton.new(popup.root, CHOICES, {
         x = POPUP_PAD, y = POPUP_PAD,
         selectedValues = options.trees,
