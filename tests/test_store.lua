@@ -79,13 +79,12 @@ check("earlier hints kept", r.earlierHints and r.earlierHints[1], "on the island
 check("lastWorld seenAt exact", store.lastWorld.seenAt, 1793940389123)
 check("lastWorld number", store.lastWorld.number, 205)
 
--- A version 3 save (times as rounded floats) still loads.
-disk.schemaVersion = 3
+-- A save from a newer format is left alone: the plugin starts empty.
+disk.schemaVersion = 2
 disk.worlds = throughDb({ { world = 9, status = "none", spawnAt = 1793945263552 } })
 store.worlds = {}
 store.load()
-check("v3 loads", store.worlds[9] ~= nil, true)
-check("v3 time is the rounded value", store.worlds[9].spawnAt, 1793945239552)
+check("newer format not loaded", store.worlds[9], nil)
 
 print(string.format("%d passed, %d failed", passes, failures))
 if failures > 0 then error("tests failed") end

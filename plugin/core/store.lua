@@ -43,13 +43,9 @@ local devlog = require("core/devlog")
 
 local store = {}
 
--- Bump this when the saved format changes, and add an upgrade step in load().
--- 1: the first format (no world records yet), and 0.3.0-dev's first records.
--- 2: (dev only) records timed from spawnedAt.
--- 3: records keep spawnAt plus a window (spawnEarliest / spawnLatest).
--- 4: same records, big whole numbers saved as "int:..." text (see above).
---    Version 3 saves still load; their times are just up to ~1 min off.
-local SCHEMA_VERSION = 4
+-- Bump this when a released version changes the saved format, and add an
+-- upgrade step in load(). 1: the first release's format.
+local SCHEMA_VERSION = 1
 
 -- Largest whole number a 32-bit float holds exactly (2 to the power 24).
 local FLOAT32_EXACT_LIMIT = 16777216
@@ -129,11 +125,6 @@ function store.load()
     end
 
     local savedList = restoreIntegers(safe.try(function() return PersistentDB:GetStructuredData("worlds") end) or {})
-    if savedVersion < 3 then
-        -- Older world records only ever existed in dev builds, in other
-        -- formats. Not worth converting: start them fresh.
-        savedList = {}
-    end
     store.worlds = {}
     local count = 0
     for _, record in ipairs(savedList) do
