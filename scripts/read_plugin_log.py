@@ -7,10 +7,12 @@ game's copy.
 Usage:
   python scripts/read_plugin_log.py                        # Evil Trees capture log
   python scripts/read_plugin_log.py --key <key>            # another saved text key
+  python scripts/read_plugin_log.py --prefix <text>        # every key starting with <text>, one per line
   python scripts/read_plugin_log.py --db <path-to-PluginData.db>
 """
 
 import argparse
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -24,6 +26,7 @@ def main() -> None:
     args.add_argument("--db", type=Path, default=DEFAULT_DB, help="path to PluginData.db")
     args.add_argument("--plugin", default="Evil Trees", help="plugin name (PluginID); default: Evil Trees")
     args.add_argument("--key", default="captureLog", help="PersistentDB key (default: captureLog)")
+    args.add_argument("--prefix", help="print every key that starts with this text (instead of --key)")
     options = args.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -37,14 +40,33 @@ def main() -> None:
 
         connection = sqlite3.connect(copy)
         try:
-            query = "SELECT PluginID, Value FROM DataStore WHERE Key = ?"
-            params = [options.key]
+            if options.prefix is not None:
+                # substr, not LIKE: a prefix may contain % or _.
+                query = "SELECT Key, Value FROM DataStore WHERE substr(Key, 1, ?) = ?"
+                params = [len(options.prefix), options.prefix]
+            else:
+                query = "SELECT PluginID, Value FROM DataStore WHERE Key = ?"
+                params = [options.key]
             if options.plugin is not None:
                 query += " AND PluginID = ?"
                 params.append(options.plugin)
             rows = connection.execute(query, params).fetchall()
         finally:
             connection.close()
+
+    if options.prefix is not None:
+        if not rows:
+            print(f"No saved keys start with '{options.prefix}' (has the plugin run, and saved yet?)")
+            return
+
+        # Sort mark2 before mark10: split each key into text and number parts.
+        def natural(row):
+            return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", row[0])]
+
+        for key, value in sorted(rows, key=natural):
+            text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+            print(f"{key}: " + text.replace("\x00", ""))
+        return
 
     if not rows:
         print(f"No saved entry found for key '{options.key}' (has the plugin run, and saved yet?)")

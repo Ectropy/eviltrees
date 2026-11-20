@@ -29,6 +29,10 @@
 .EXAMPLE
     .\scripts\deploy-plugin.ps1 -Sprites
     Deploys the local sprite lab (research\spritelab, not in git) as dev_plugins\evil-trees-sprite-lab.
+
+.EXAMPLE
+    .\scripts\deploy-plugin.ps1 -Effects
+    Deploys the local effects lab (research\effectslab, not in git) as dev_plugins\evil-trees-effects-lab.
 #>
 param(
     # Deploy the research probe instead of the real plugin.
@@ -39,6 +43,9 @@ param(
 
     # Deploy the sprite lab (icon candidates) instead of the real plugin.
     [switch]$Sprites,
+
+    # Deploy the effects lab (lightning and sparks on a canvas) instead of the real plugin.
+    [switch]$Effects,
 
     # Keep plugin.json's Hub ID for PrettyUI instead of the dev folder (see above).
     [switch]$HubDependency,
@@ -59,6 +66,9 @@ if ($Probe) {
 } elseif ($Sprites) {
     $relative = "research\spritelab"
     $Name = "evil-trees-sprite-lab"
+} elseif ($Effects) {
+    $relative = "research\effectslab"
+    $Name = "evil-trees-effects-lab"
 } else {
     $relative = "plugin"
     $Name = "evil-trees"
