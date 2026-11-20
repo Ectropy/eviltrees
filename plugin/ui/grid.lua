@@ -791,7 +791,6 @@ local DOCK_ORDER = {
 
 local function buildDock()
     dock = {}
-    -- pairs walks a table's keys and values (like Object.entries in JS).
     for side, look in pairs(DOCK_BUTTONS) do
         dock[side] = prettyui.SpriteButton.new(window.root, look.sprite, function()
             pickSide(side)

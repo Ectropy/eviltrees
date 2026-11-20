@@ -624,7 +624,7 @@ Event.Logic.Subscribe("evilTrees", safe.handler("Logic", function(event)
     end
     if event.logicTick % PANEL_EVERY_TICKS == 0 then
         -- The world whose tree is in view pauses its timers: the game tells
-        -- us when that tree changes. "x and y or nil" is Lua's x ? y : nil.
+        -- us when that tree changes.
         local inViewWorld = trees.isTreeInView() and currentWorld.number or nil
         if worldstate.tick(store.worlds, clock.now(), inViewWorld) then
             store.markChanged()
