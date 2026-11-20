@@ -143,12 +143,6 @@ end
 local function build(counts, cell, debugLines)
     debugClock = nil
 
-    -- Nothing known about this world: say how to find out.
-    if cell ~= nil and cell.noIntel then
-        view:AddText({ text = "Talk to a spirit tree, use the Sunbeam crown, or find the tree.",
-                       colour = colours.PLACE })
-    end
-
     view:AddSimpleButton("All worlds (" .. counts.scouted .. " / " .. counts.total .. ")", function()
         if onToggleGrid ~= nil then
             onToggleGrid()

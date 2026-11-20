@@ -127,7 +127,6 @@ check("O3 scouted count in the button", button("All worlds").component.content, 
 check("O4 current world on the card", first.world.content, "w204")
 check("O4b sky-blue outline on your world", first.border.rgba, 0x4FC3F7FF)
 check("O4c no intel", first.status.content, "Nothing known yet.")
-check("O4d how to find out", shows("Talk to a spirit tree"), true)
 -- The only title left is the debug section's. (The debug text itself may
 -- mention other worlds, so look at titles only.)
 local titles = {}
@@ -152,7 +151,6 @@ check("T2 status, in the spawn colour", card().status.content .. "," .. string.f
 -- the fake clock never learns the seconds here, so the time gets a "~"
 check("T3 countdown", string.match(card().countdown.content, "^Spawns in ~%dm") ~= nil, true)
 check("T4 clear button", button("Clear world") ~= nil, true)
-check("T4b no hint to scout any more", shows("Talk to a spirit tree"), false)
 
 -- A second later: the card's countdown changes in place (no rebuild).
 local before = card().countdown.content
