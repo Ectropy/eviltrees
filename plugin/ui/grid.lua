@@ -286,23 +286,23 @@ end
 -- Hover text: everything, unabbreviated, e.g.
 -- "w204 - Evil willow - 45% | Lightning in 4m 5s | West of Falador".
 local function tooltipText(cell, now)
-    local parts = { cell.heading }
+    local pieces = { cell.heading }
     local countdown = overview.countdownText(cell, now)
     if countdown ~= nil then
-        parts[#parts + 1] = countdown
+        pieces[#pieces + 1] = countdown
     end
     -- The cell counts to the death, so say when that is too.
     local death = overview.deathText(cell, now)
     if death ~= nil then
-        parts[#parts + 1] = death
+        pieces[#pieces + 1] = death
     end
     if cell.place ~= nil then
-        parts[#parts + 1] = cell.place
+        pieces[#pieces + 1] = cell.place
     end
     if cell.noIntel then
-        parts[#parts + 1] = "No intel"
+        pieces[#pieces + 1] = "No intel"
     end
-    return table.concat(parts, " | ")
+    return table.concat(pieces, " | ")
 end
 
 -- A cell's outline: gold if clicked, sky blue on your world, else plain.
