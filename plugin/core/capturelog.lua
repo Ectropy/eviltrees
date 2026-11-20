@@ -7,7 +7,8 @@
     this is where the full history lives. scripts/read_plugin_log.py reads it:
         python scripts/read_plugin_log.py
 
-    Will be removed or turned off before the plugin is submitted.
+    BEFORE A MOD.IO RELEASE: turn this off (it saves game text, including
+    anything the player examines, to disk), along with main.lua's SHOW_DEBUG.
 ]]
 
 local capturelog = {}

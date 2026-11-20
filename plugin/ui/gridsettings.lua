@@ -30,8 +30,7 @@
     keeps the choices and saves them. (The world card's place can also be
     changed with the arrows on the card itself: see ui/grid.lua.)
 
-    How the gear works (the same way as the Quest Helper plugin, which is
-    BSD-licensed and allows AI use; no code copied):
+    How the gear works:
       - The gear is a PrettyUI SpriteButton ON the window, anchored to its
         right edge, so it moves and resizes with the window by itself.
       - PrettyUI drags the window with an invisible Layer (window.titleDrag)
