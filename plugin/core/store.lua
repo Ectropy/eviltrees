@@ -12,9 +12,7 @@
       "lastWorld"     - the last world we knew we were on, plus when. Lets us
                         check saving works across reloads before there is intel.
       "gridWindow"    - where the world grid window was and whether it was
-                        open: { x, y, width, height, open = 1 or 0 }. (A
-                        number, not true/false: we haven't checked how
-                        PersistentDB saves booleans.)
+                        open: { x, y, width, height, open = 1 or 0 }.
       "gridView"      - the grid's sort, filters and layout, as six strings:
                         { sort = "soonest", worlds = "all", info = "any",
                         trees = "yew,magic", lines = "two", card = "top" }

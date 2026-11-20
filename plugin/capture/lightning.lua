@@ -7,8 +7,8 @@
     beta client found that a strike is done by an invisible NPC, EVILTREE_THOR (NPC id
     416, empty display name). It appears next to the tree at the moment of
     the strike and disappears about a second later. So "Thor appeared" =
-    "lightning struck just now", to the second. (Seen on a killing strike;
-    assumed to be the same for the other strikes.)
+    "lightning struck just now", to the second. All three strikes work
+    this way.
 
     We match by NPC id, never by name (its name is empty). Reports go to the
     callback given to lightning.setOnStrike(), as onStrike(tileX, tileZ).

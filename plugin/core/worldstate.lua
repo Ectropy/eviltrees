@@ -122,9 +122,7 @@ local DEATH_MS = 30 * MINUTE
 -- EVENT_DUE_MS[1] = first strike, [2] = second strike, [3] = death.
 -- (Lua lists start at 1, so EVENT_DUE_MS[k] matches the event number.)
 local EVENT_DUE_MS = { STRIKE_1_MS, STRIKE_2_MS, DEATH_MS }
--- The dead trunk (rewards) stays 9:06 after death, then fades out. Seen
--- three times to the second in the beta (W204 willow, W205 elder, W204
--- yew, 2026-11-06/07; also the W205 oak, 9 +/- 1 min). EctoTrees uses 10.
+-- The dead trunk (rewards) stays 9:06 after death, then fades out.
 local DEAD_MS = 9 * MINUTE + 6 * SECOND
 -- Events reach us on server ticks (0.6 s), so a time we saw can be up to
 -- about a second late. Windows built from a sighting allow this much slack.
@@ -325,15 +323,10 @@ local function forgetWindow(record, name)
 end
 
 -- "Another evil tree in approximately N minutes" -> a window for S.
--- The game seems to round DOWN, but never shows less than 1. Seen in the beta
--- (W204, real spawn 03:43:32): 7m21s left -> "7", 6m23s -> "6", 2m45s -> "2",
--- 48s -> "1", 14s -> "1". So "N minutes" means N to N+1 minutes away, and
--- "1 minute" means 0 to 2 minutes away. Returns earliest, latest.
--- Game bug (known from EctoTrees): with exactly 1 hour left the game says
--- "approximately 0 minutes" instead of "1 hour". parser.lua already turns
--- that 0 into 60, so here it's the window 60 to 61 minutes away, which fits
--- the round-down rule (60 whole minutes = "1 hour and 0 minutes", and only
--- the "0 minutes" part gets printed).
+-- The game rounds the time left DOWN to whole minutes, but never says less
+-- than 1. So "N minutes" means N to N+1 minutes away, and "1 minute" means
+-- 0 to 2 minutes away. (Game bug: with 1 hour left it says "approximately
+-- 0 minutes"; parser.lua turns that 0 into 60.) Returns earliest, latest.
 local function timerWindow(timerMs, now)
     local minutes = timerMs // MINUTE       -- // is whole-number division
     local earliest = now + minutes * MINUTE
@@ -402,10 +395,10 @@ end
 -- right now. At or below 50% we take it that strike 1 (M + 10) has
 -- happened, so M was at least 10 min ago; at or below 25%, strike 2
 -- (M + 20), so at least 20 min ago. Players chopping can also bring the
--- health down early, but we assume they then stay until the tree is dead,
--- so it can't outlive what this says by much. (Decided 2026-11-07: thinking
--- a tree will die later than it really does is worse than the other way
--- round.) health may be nil (unknown). Returns the latest possible M.
+-- health down early, but then they usually finish the tree off, so it
+-- can't outlive what this says by much. If we're wrong, the tree dies
+-- sooner than shown, never later. health may be nil (unknown). Returns
+-- the latest possible M.
 local function latestMature(health, now)
     if health ~= nil and health <= STRIKE_2_HEALTH then
         return now - STRIKE_2_MS
@@ -675,11 +668,10 @@ end
 -- Activity tracker (two game variables, sent when you log in or hop)
 -------------------------------------------------------------------------------
 
--- The tracker's minutes are only trusted up to this. Logged in during a
--- dead trunk, it gave 126 when the next tree came 107 min later (W205,
--- 2026-11-08): it seems to give the LATEST the next tree can come (fade +
--- 2:00) then. After a fade the wait has been 1:40-1:51, so anything above
--- 1:50 may be one of those. (User's call, 2026-11-08.)
+-- Tracker minutes above this are ignored. While a dead trunk is up, the
+-- tracker doesn't give the real timer but a later one (about 2 hours after
+-- the fade). A real timer is never much above this: after a fade the next
+-- tree comes 1h 40m to 1h 51m later.
 worldstate.TRACKER_MAX_MINUTES = 110
 
 -- reading comes from capture/tracker.lua: { minutes = 52, alive = false }.

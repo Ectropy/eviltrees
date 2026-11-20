@@ -272,10 +272,8 @@ function parser.parseExamine(text)
     if contains(lower, "rewards to be had") then
         return { deadWithRewards = true }
     end
-    -- The same trunk once your rewards are gone (seen W205, 2026-11-06):
-    -- "It looks better dead than alive." This wording may be shared with
-    -- other dead things, so worldstate ignores it; it's only recognised
-    -- to keep the capture log readable.
+    -- The trunk once your rewards are gone. Recognised for the capture log
+    -- only; worldstate ignores it.
     if contains(lower, "it looks better dead than alive") then
         return { deadNoRewards = true }
     end

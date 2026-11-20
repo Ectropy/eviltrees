@@ -12,7 +12,7 @@
         "sapling" - growing; saplingLevel is 1..5, the type isn't in the ID
         "alive"   - mature tree; healthCap is 100, 50 or 25 (it can't be above that)
         "dying"   - just felled
-        "dead"    - the dead trunk with rewards (removed ~10 minutes later)
+        "dead"    - the dead trunk with rewards (removed 9:06 after death)
 
     We match by exact ID on purpose: other content (the Wilderness flash event,
     Treasure Hunter items) also has "EVILTREE" in its names.

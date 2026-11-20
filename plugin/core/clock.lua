@@ -90,8 +90,8 @@ function clock.onVarTransmit(event)
     end
 end
 
--- Event.ServerLogic handler: a safety net in case a VarTransmit is ever missed.
--- Reading one variable every 0.6 s is cheap.
+-- Event.ServerLogic handler: re-reads the minute each server tick, so the
+-- clock doesn't rely on VarTransmit alone. One read every 0.6 s is cheap.
 function clock.onServerTick()
     handleMinute(readMinuteVar())
 end
