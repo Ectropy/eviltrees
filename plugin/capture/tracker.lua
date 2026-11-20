@@ -44,7 +44,7 @@ local pendingLogin = nil
 
 -- Reads both variables. Returns { minutes = 52, alive = false }, or nil if
 -- the game won't give them to us.
-function tracker.read()
+local function read()
     local minutes = safe.try(function() return var.VarPlayer.FromID(TIME_VARBIT_ID).value end)
     local alive = safe.try(function() return var.VarPlayer.FromID(ALIVE_VARBIT_ID).value end)
     if type(minutes) ~= "number" or type(alive) ~= "number" then
@@ -97,7 +97,7 @@ function tracker.takeLoginReading(now)
         end
         earliest, latest = login.after, now
     end
-    local reading = tracker.read()
+    local reading = read()
     if reading == nil then
         return { skipped = "variables not readable" }
     end
