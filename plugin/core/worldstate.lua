@@ -356,8 +356,8 @@ end
 
 -- When event number k happens (1 = first strike, 2 = second, 3 = death).
 --   latest = false: our best guess, from matureAt. Used for everything
---                   while M is trusted (decided 2026-11-07: moving on a
---                   little early is fine, a countdown stuck at 0:00 isn't).
+--                   while M is trusted (moving on a little early is fine,
+--                   a countdown stuck at 0:00 isn't).
 --   latest = true:  the LATEST it can happen, from matureLatest. Used only
 --                   while M is NOT trusted ("dies within").
 -- Events come exactly M + 10/20/30 min after the tree matured (seen to the
@@ -777,7 +777,7 @@ function worldstate.applyStrike(worlds, world, now, secondsKnown)
         if record.status ~= "alive" or record.matureEarliest == nil then
             -- Our timers had it as a sapling, dead or not spawned yet: they
             -- were wrong, it's this tree and it's alive. (Also fills in the
-            -- window for M on records saved by older versions.)
+            -- window for M if we had none.)
             becomeAlive(record, now, record.health)
         end
         if isRecent(record.stageDropAt, now, PAIR_MS) then
@@ -920,7 +920,7 @@ local function runTimers(record, now)
     --      half-hour window, and no lightning countdown is shown for it.
     --    useLatest is "not trusted": eventTime(record, k, useLatest).
     if record.status == "alive" then
-        seedMatureFromSpawn(record)     -- also fills in records saved by older versions
+        seedMatureFromSpawn(record)     -- step 2 made it alive without a window for M
     end
     if record.status == "alive" and record.matureAt ~= nil then
         local trusted = matureTrusted(record)

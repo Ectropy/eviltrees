@@ -34,10 +34,6 @@
       ui/parts.lua              - a Rectangle and a one-line Text, for cells and the card
       ui/worldcard.lua          - one world in full: the grid's card and the ribbon page's
 
-    Status (in development): dialogue, examine text and tree objects are
-    merged into saved world records (core/worldstate.lua), and timed rules
-    move them along. The dashboard shows every world we know about.
-
     Lua reminder: require("core/clock") loads core/clock.lua (path relative to
     this plugin's folder) and returns whatever that file returns, like an ES
     module import. Each file is only run once; later requires reuse it.
@@ -93,7 +89,7 @@ local serverTicks = 0
 
 store.load()
 
--- Keep what the previous session saved, so the panel can show it (proves saving works).
+-- The world the previous session was on (shown in the debug section).
 local previousWorld = store.lastWorld
 -- When the previous session saw us leave the game (hop or log out), or nil.
 -- The activity tracker's login reading needs it after a restart.

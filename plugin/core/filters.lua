@@ -7,7 +7,8 @@
 
     It works on CELLS (what overview.cells returns), never on saved records.
     The cell fields used: world, members, kind, cellAt, treeKey, hasHint,
-    hasPlace, healthValue, saplingType (all described above buildCell in core/overview.lua).
+    hasPlace, healthValue, saplingType (all described above buildCell in
+    core/overview.lua).
 
     The user's choices ("prefs") are a table like:
         { sort = "soonest", worlds = "p2p", info = "any", trees = { "yew", "magic" },
@@ -16,9 +17,9 @@
     lines and card are not filters: they say how the grid is drawn (one or
     two lines per cell; the world card above the cells or as a sidebar on
     the left or right), and are kept here so they are saved and checked
-    with the rest. trees is a list of
-    tree keys; an empty list means any tree. Prefs get saved, so always run
-    saved data through filters.normalize before using it.
+    with the rest. trees is a list of tree keys; an empty list means any
+    tree. Prefs get saved, so always run saved data through
+    filters.normalize before using it.
 
     Words used in this file:
       "active"  a cell with kind "spawn", "sapling", "alive" or "dead"
@@ -57,7 +58,7 @@ filters.INFOS = {
 }
 -- (EctoTrees also had "Has hint", "Has place" and "Needs / Has health".
 -- They help scouts who share intel; playing alone, the useful ones are
--- those that say which world is worth a visit. Left out on 2026-11-09.)
+-- those that say which world is worth a visit.)
 
 -- How the cells are drawn: "two" adds the health and the place on a
 -- second line (see ui/grid.lua). Not a filter: it hides nothing. Chosen on

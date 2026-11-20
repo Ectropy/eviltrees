@@ -9,8 +9,9 @@
         West of Falador                  <- the place, cut off with "..."
     The health is just the number, also for "50% or less". An icon AND a
     colour show what the world is doing (the icon for colour-blind
-    players; see ui/icons.lua); the countdown is to the tree's death (or its spawn,
-    full growth, or the rewards going); hovering shows everything we know.
+    players; see ui/icons.lua); the countdown is to the tree's death (or
+    its spawn, full growth, or the rewards going); hovering shows
+    everything we know.
     When a tree's type is known, the cell says it too: "w104 Elder 29m"
     (a sapling's as well: its icon and colour say it is a sapling).
     World numbers are coloured like the game's world list (gold P2P, white
@@ -18,9 +19,9 @@
     a thick sky-blue outline; the clicked one a gold outline.
     A card at the top of the window shows the clicked world (or the one
     you're on) in full (ui/worldcard.lua). Its texts wrap, so the card
-    grows taller for a long place; the toolbar and cells then move down. Under it, a toolbar sorts and filters the cells
-    (ui/gridtoolbar.lua). The card and toolbar stay put: only the cells
-    under them scroll.
+    grows taller for a long place; the toolbar and cells then move down.
+    Under it, a toolbar sorts and filters the cells (ui/gridtoolbar.lua).
+    The card and toolbar stay put: only the cells under them scroll.
     For a wide, short grid the card can instead be a sidebar, a fixed
     SIDEBAR_WIDTH wide, on the left or right of the cells, with the
     toolbar under it, so the cells get the window's whole height
@@ -55,7 +56,8 @@
         (see measureCells), so the longest world number, tree type and
         countdown never overlap. The space for the tree type is only as
         wide as the widest type on show ("Oak" needs less than "Willow"),
-        and none is kept while no type is known, so the grid stays compact. When the window is resized, the cells are moved and
+        and none is kept while no type is known, so the grid stays
+        compact. When the window is resized, the cells are moved and
         stretched (not rebuilt). The height is the player's choice: a
         short window scrolls, a tall one has space.
       - The card and toolbar stay visible while the cells scroll: see
@@ -108,8 +110,8 @@ local TWO_LINE_HEIGHT = 34         -- a two-line cell
 local PLACE_Y = 17                 -- two lines: where the second line starts
 local PLACE_HEIGHT = 15            -- two lines: the second line's height
 -- Two lines: the narrowest cell still shows this much of a place on its
--- second line. A made-up short place name (short forms aren't written
--- yet); real names are often longer and are cut off with "...".
+-- second line (a made-up short place name; real names are often longer
+-- and are cut off with "...").
 local PLACE_SAMPLE = "S. Tree Gnome Stronghold"
 local FALLBACK_HEALTH_WIDTH = 26   -- "100%"
 local FALLBACK_SAMPLE_WIDTH = 140
@@ -141,7 +143,7 @@ local LINK_TEXT = "remove filters."
 
 local DEFAULT_X, DEFAULT_Y = 60, 80
 local DEFAULT_WIDTH = 934       -- about 9 one-line columns, or 4 two-line ones (depends on the measured widths)
-local DEFAULT_HEIGHT = 430     -- 380 before the card, plus room for it
+local DEFAULT_HEIGHT = 430
 -- Minimum height: title bar (32) + the card (86) + a scroll area tall
 -- enough for the scrollbar's two arrows and a row of cells (~64) + bottom
 -- edge (8). It grows with the toolbar's rows (see setMinimumHeight).
@@ -978,9 +980,9 @@ end
 -- rebuilt. The window's height is left alone.
 local function layout(visible)
     local width = contentWidth()
-    -- math.floor also turns 10.0 into the integer 10 (Lua 5.4).
     local rowWidth = width - 2 * PAD            -- the space for one row of cells
     -- As many columns as fit at the narrowest width (n cells have n - 1 gaps)...
+    -- math.floor also turns 10.0 into the integer 10 (Lua 5.4).
     local columns = math.max(1, math.floor((rowWidth + GAP) / (minCellWidth + GAP)))
     -- ...then share out the whole row between them, so they stretch to
     -- fill it. (A few units can be left over on the right, from rounding.)
@@ -1370,7 +1372,7 @@ local function createWindow()
         width = placement.width, height = placement.height,
         resizable = true,
         minWidth = MIN_WIDTH, minHeight = MIN_HEIGHT,
-        destroyOnClose = true,          -- free the ~700 components while closed
+        destroyOnClose = true,          -- free the cells' components while closed
         onClose = function()
             -- The player closed it with the X. (PrettyUI destroys the
             -- window right after this.)

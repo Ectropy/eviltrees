@@ -26,9 +26,10 @@
       - The SimpleView lays its components out top to bottom when they're
         added, and can't move them later. So when what it shows changes
         (the scouted count, whether there is a Clear button, a debug line)
-        or the card above it changes height, it is destroyed and built again. That happens rarely. To notice,
-        each build remembers a "signature": everything it shows, joined
-        into one string. A different signature means rebuild.
+        or the card above it changes height, it is destroyed and built
+        again. That happens rarely. To notice, each build remembers a
+        "signature": everything it shows, joined into one string. A
+        different signature means rebuild.
 
     If building fails on a page that was just opened, something is wrong
     with PrettyUI itself (e.g. a version without a call we use), so
@@ -156,7 +157,7 @@ local function build(scouted, cell, debugLines)
             { tooltip = "Forget everything about world " .. cell.world })
     end
 
-    -- Debug section (temporary, for testing in the beta).
+    -- Debug section (main.lua's SHOW_DEBUG).
     if debugLines ~= nil then
         view:AddDivider({ marginTop = 4, marginBottom = 4 })
         view:AddTitle("Debug")

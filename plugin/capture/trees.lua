@@ -17,23 +17,25 @@
     Reports go to the callback given to trees.setOnEvent(), as
         onEvent(kind, info, tileX, tileZ, previous)
     where kind is "seen", "fading", "removed" or "unloaded" (we left it, see
-    below; only for the capture log, it says nothing about the tree), info is the data/trees.lua
-    entry (treeType, stage, healthCap, saplingLevel), and previous is the
-    info of the loc this one just replaced (see below), or nil.
+    below; only for the capture log, it says nothing about the tree), info
+    is the data/trees.lua entry (treeType, stage, healthCap, saplingLevel),
+    and previous is the info of the loc this one just replaced (see below),
+    or nil.
 
     Real change vs. "came into view": walking up to a tree that was already
-    there also sends a LocAdded. A real stage change is a LocRemoved followed straight away by a LocAdded
-    at (nearly) the same tile - the tile can shift by one when the model gets
-    bigger. So a removed tree is remembered for a couple of server ticks; if
-    a new evil tree loc appears close by in that time, it's reported with
-    previous = the removed one. A LocAdded straight onto the tile of a
-    tracked tree (no LocRemoved) is a change too.
+    there also sends a LocAdded. A real stage change is a LocRemoved
+    followed straight away by a LocAdded at (nearly) the same tile - the
+    tile can shift by one when the model gets bigger. So a removed tree is
+    remembered for a couple of server ticks; if a new evil tree loc appears
+    close by in that time, it's reported with previous = the removed one. A
+    LocAdded straight onto the tile of a tracked tree (no LocRemoved) is a
+    change too.
 
     Leaving: walking or teleporting away sends NO LocRemoved. So each
-    server tick we ask the game (LocList) whether every
-    tracked tree is still loaded, and quietly drop any that isn't (see
-    forgetUnloaded). Otherwise the plugin would think the tree is still in
-    view and pause its timers, and the countdown would sit at 0:00.
+    server tick we ask the game (LocList) whether every tracked tree is
+    still loaded, and quietly drop any that isn't (see forgetUnloaded).
+    Otherwise the plugin would think the tree is still in view and pause
+    its timers, and the countdown would sit at 0:00.
 ]]
 
 local safe = require("core/safe")
@@ -156,8 +158,9 @@ end
 -- Drops tracked trees the game no longer has loaded: you walked or
 -- teleported away (no LocRemoved comes for that, see the header). It's
 -- reported as "unloaded" so the capture log shows when it happened, but
--- that tells us nothing about the tree itself. It's still remembered as "just removed" for a moment, in case it
--- was really a stage change that we happened to check halfway through.
+-- that tells us nothing about the tree itself. It's still remembered as
+-- "just removed" for a moment, in case it was really a stage change that
+-- we happened to check halfway through.
 -- If we can't ask the game (the call fails), the tree is kept.
 -- Setting a field to nil while pairs() walks the table is allowed in Lua
 -- (only adding new keys during the walk isn't).

@@ -9,8 +9,9 @@
                         future versions can upgrade old saves.
       "worlds"        - one record per world we have intel on (format in
                         core/worldstate.lua).
-      "lastWorld"     - the last world we knew we were on, plus when. Lets us
-                        check saving works across reloads before there is intel.
+      "lastWorld"     - the last world we knew we were on, when we saw it, and
+                        when we left the game (for the activity tracker's
+                        login reading after a restart).
       "gridWindow"    - where the world grid window was and whether it was
                         open: { x, y, width, height, open = 1 or 0 }.
       "gridView"      - the grid's sort, filters and layout, as six strings:
@@ -55,7 +56,7 @@ local FLOAT32_EXACT_LIMIT = 16777216
 local INT_PREFIX = "int:"
 
 store.worlds = {}           -- [worldNumber] = record table
-store.lastWorld = nil       -- { number = 205, seenAt = <unix ms> } or nil
+store.lastWorld = nil       -- { number = 205, seenAt = <unix ms>, leftAt = <unix ms or nil> } or nil
 store.gridWindow = nil      -- { x =, y =, width =, height =, open = 1 } or nil
 store.gridView = nil        -- { sort =, worlds =, info =, trees =, lines =, card = } (all strings) or nil
 store.lastSavedAt = nil     -- unix ms of the most recent save this session
@@ -161,7 +162,7 @@ function store.saveNow(nowMs)
     -- Each table is deleted before it's written. The docs say Set replaces
     -- the old value, but in the beta a field from an older save seemed to
     -- survive. Deleting first guarantees the save is exactly this table
-    -- (important later, when clearing a world must really remove its fields).
+    -- (so a cleared world, or a field set to nil, really goes).
     local ok, err = pcall(function()
         PersistentDB:SetInt("schemaVersion", SCHEMA_VERSION)
         PersistentDB:Delete("worlds")

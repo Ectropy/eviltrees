@@ -5,9 +5,9 @@
 
     The game shows it in the friends list header, e.g.
         "Friends List RuneScape 205"
-    (interface 550, component 48). Testing in the beta client showed this text can be
-    read even when the friends tab is closed. There is no API call or game
-    variable for the current world, so we read that label.
+    (interface 550, component 48). Testing in the beta client showed this
+    text can be read even when the friends tab is closed. There is no API
+    call or game variable for the current world, so we read that label.
 
     When we re-read it:
       - at start-up,

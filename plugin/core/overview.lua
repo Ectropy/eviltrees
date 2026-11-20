@@ -14,8 +14,8 @@
                                      -- entry per place: two or three when the
                                      -- hints leave a choice (place then joins
                                      -- them with " or "); nil if place is nil
-            noIntel = true,          -- only on the current world's row, when
-                                     -- we know nothing about it yet
+            noIntel = true,          -- only on a world we know nothing
+                                     -- about (it has no record)
             eventLabel = "Lightning in", eventAt = <Unix ms>, approximate = false,
             eventSuffix = " or less",   -- after the time (saplings only), or nil
             eventDue = "Spawning",      -- shown once no time is left, or nil
@@ -26,10 +26,10 @@
     overview.cells(...) gives one "cell" for EVERY world (with intel or
     not), in world order, and overview.currentCell(...) the cell for the
     world you're on. A cell is a row (above) plus a few short fields, see
-    buildCell. Its countdown
-    is overview.cellCountdown(cell, now): whole minutes ("29m", "1h 5m")
-    until the last minute, then seconds ("45s"), so it changes once a
-    minute. For an alive tree it counts to its DEATH, not the next strike.
+    buildCell. Its countdown is overview.cellCountdown(cell, now): whole
+    minutes ("29m", "1h 5m") until the last minute, then seconds ("45s"),
+    so it changes once a minute. For an alive tree it counts to its DEATH,
+    not the next strike.
 ]]
 
 local worldstate = require("core/worldstate")
@@ -116,13 +116,14 @@ end
 
 -- Where the tree is (or will be): the exact place if we know it, else the
 -- places the hints leave (see location.forHints), else the newest hint
--- itself. Returns three values: the text on one line ("A or B"), the
--- same as a list with one entry per place ({ "A", "B" }), for the card,
--- which shows each on its own line, a short form for a grid cell (the
--- same text, but a hint without "Hint: "), and a fourth value: true when
--- the place is exact (a tile, clue or one-place hint), false when it is
--- only a hint. The list has no "Hint: " in it: the card adds the label
--- ("Hint:" or "Exact Location:") itself. All nil if we know nothing.
+-- itself. Returns four values (all nil if we know nothing):
+--   1. the text on one line: "A", "A or B", or "Hint: north as the crow..."
+--   2. the same as a list, one entry per place ({ "A", "B" }), for the
+--      card, which shows each on its own line and adds its own label
+--      ("Hint:" or "Exact Location:"), so no "Hint: " in it
+--   3. the text for a grid cell: as 1, but without "Hint: "
+--   4. true when the place is exact (a tile, clue or one-place hint),
+--      false when it comes from hints
 local function describePlace(record)
     local name = location.forRecord(record)
     if name ~= nil then
@@ -162,7 +163,7 @@ local function cachedPlace(record)
     return table.unpack(saved, 1, 4)
 end
 
--- One world's row. record may be nil (current world, nothing known yet).
+-- One world's row. record may be nil (a world we know nothing about).
 local function buildRow(number, record, now)
     local row = { world = number }
     if record == nil then
@@ -177,7 +178,7 @@ local function buildRow(number, record, now)
         parts[#parts + 1] = health
     end
     row.heading = table.concat(parts, " - ")
-    -- Two results into two fields, like [row.place, row.places] = f() in JS.
+    -- Four results into four fields, like [row.place, row.places, ...] = f() in JS.
     row.place, row.places, row.cellPlace, row.placeExact = cachedPlace(record)
 
     -- nextEvent returns three values: label, time, approximate.
@@ -279,7 +280,7 @@ end
 --   cellPlace the place for a two-line cell: as place, but a hint without
 --             "Hint: " (no room to spare); nil if place is nil
 --   placeExact true if the place is exact, false if it is only a hint (the
---             card labels them; cells don't mark them yet); nil if place is nil
+--             card labels them); nil if place is nil
 --   places    the place as a list, one per line on the card, with no "Hint: "
 --             in it (the card adds "Hint:" or "Exact Location:")
 --   status    "Evil willow - 45%", "Oak sapling", "No tree" (or nil: no intel)
