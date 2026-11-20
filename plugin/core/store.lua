@@ -150,7 +150,7 @@ function store.load()
 end
 
 -- Writes everything to PersistentDB right away. nowMs is the current time
--- (from clock.now()), recorded so the debug panel can show when we last saved.
+-- (from clock.now()), recorded so the debug section can show when we last saved.
 function store.saveNow(nowMs)
     local list = {}
     for worldNumber, record in pairs(store.worlds) do

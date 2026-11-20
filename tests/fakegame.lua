@@ -17,7 +17,7 @@ local game = {
   interfaces = {},    -- ["550:48"] = text shown in interface 550, component 48
   locs = {},          -- locs[locId] = { { isValid = true, coordGrid = {...} } } for LocList.ByConfigID
   varbits = {},       -- varbits[-20747] = 52 for var.VarPlayer.FromID
-  lastText = nil,     -- the most recent ui.Text created (the plain debug panel)
+  lastText = nil,     -- the most recent ui.Text created (the "needs PrettyUI" notice)
   tick = 0,
 }
 

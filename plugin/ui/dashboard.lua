@@ -16,8 +16,8 @@
           "Clear world"            forgets this world (asks first)
         and, optionally, a debug section (main.lua's SHOW_DEBUG)
 
-    PrettyUI is a Plugin Hub UI library, declared in plugin.json's
-    optionalDependencies; the client loads it first and gives us the global
+    PrettyUI is a Plugin Hub UI library, a required dependency in
+    plugin.json; the client loads it first and gives us the global
     "prettyui".
 
     How updating works (React developers: there is no virtual DOM here).
@@ -32,8 +32,8 @@
 
     If building fails on a page that was just opened, something is wrong
     with PrettyUI itself (e.g. a version without a call we use), so
-    dashboard.failed becomes true and main.lua switches to the plain debug
-    panel for the rest of the session.
+    dashboard.failed becomes true and, for the rest of the session, main.lua
+    shows a one-line "needs PrettyUI" notice instead.
 ]]
 
 local safe = require("core/safe")
@@ -230,7 +230,7 @@ function dashboard.update(counts, cell, now, debugLines)
         log("[error] dashboard build: " .. tostring(err))
         destroyAll()                    -- remove whatever was half built
         if freshParent then
-            dashboard.failed = true     -- main.lua falls back to the plain panel
+            dashboard.failed = true     -- main.lua then shows "needs PrettyUI"
         end
         parent = nil                    -- else: wait for the page to be opened again
         return

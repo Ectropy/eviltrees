@@ -3,7 +3,7 @@
     -------------------
     A development aid: keeps the most recent captured facts (dialogue, examine
     text, tree objects) as plain text lines and saves them to PersistentDB
-    under the key "captureLog". The debug panel can only show a few lines, so
+    under the key "captureLog". The debug section only shows a few lines, so
     this is where the full history lives. scripts/read_plugin_log.py reads it:
         python scripts/read_plugin_log.py
 

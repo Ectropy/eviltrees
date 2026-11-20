@@ -33,7 +33,6 @@
       ui/colours.lua            - the colours the grid, card and ribbon page share
       ui/parts.lua              - a Rectangle and a one-line Text, for cells and the card
       ui/worldcard.lua          - one world in full: the grid's card and the ribbon page's
-      ui/debugpanel.lua         - plain text panel, used if PrettyUI isn't loaded
 
     Status (in development): dialogue, examine text and tree objects are
     merged into saved world records (core/worldstate.lua), and timed rules
@@ -47,22 +46,16 @@
 local devlog = require("core/devlog")
 devlog.enabled = false          -- set to true to see [clock]/[store]/[world] messages in the console
 
--- Where the debug panel goes: true = the plugin's page in the Plugins window
--- (ribbon icon), false = a small box floating over the game window.
--- The ribbon icon shows as "ET" (our initials, since we have no icon image)
--- in the Plugins floating window.
-local USE_RIBBON = true
-
 -- Show the debug section under the dashboard (records, tiles, recent captures).
 local SHOW_DEBUG = true
 
 -- PrettyUI is a required dependency (plugin.json: "prettyui": 6398181, its
 -- Plugin Hub ID): the client loads it first and gives it to us as the
 -- global "prettyui". We need PrettyUI 1.3.0 or later (we make every
--- component with prettyui.NewComponent). If it is ever missing anyway,
--- reading the global just gives nil, and we fall back to the plain debug
--- panel.
-local USE_DASHBOARD = USE_RIBBON and prettyui ~= nil
+-- component with prettyui.NewComponent). If it is missing anyway (e.g. a
+-- dev install without it), reading the global just gives nil, and the
+-- ribbon page only says that PrettyUI is needed.
+local HAS_PRETTYUI = prettyui ~= nil
 
 local safe = require("core/safe")
 local worlds = require("data/worlds")
@@ -84,10 +77,9 @@ local sampledata = require("core/sampledata")
 local dashboard = require("ui/dashboard")
 local grid = require("ui/grid")
 local gridsettings = require("ui/gridsettings")
-local debugPanel = require("ui/debugpanel")
 
 local VERSION = "0.8.0-dev"
-local MAX_RECENT = 3            -- how many recent captures the debug panel lists
+local MAX_RECENT = 3            -- how many recent captures the debug section lists
 local MAX_OTHER_WORLDS = 4      -- how many other worlds' records it lists
 local MS_PER_MINUTE = 60000
 local SAVE_EVERY_TICKS = 8      -- server ticks (~0.6 s each), so a save at most every ~5 s
@@ -109,10 +101,10 @@ local previousWorld = store.lastWorld
 local previousLeftAt = previousWorld and previousWorld.leftAt
 
 -------------------------------------------------------------------------------
--- Debug panel content
+-- Debug section content
 -------------------------------------------------------------------------------
 
--- The newest captured facts, shown in the debug panel (newest first).
+-- The newest captured facts, shown in the debug section (newest first).
 local recentCaptures = {}
 
 -- Adds a line like "03:41:12 W204 spirit tree: spawn in 1h42m" to the panel
@@ -217,7 +209,7 @@ local function otherWorldLines(maxLines)
 end
 
 -- How many worlds have a record ("scouted"), and how many worlds there
--- are, for the "All worlds (n / 137)" button and the debug panel. A world
+-- are, for the "All worlds (n / 137)" button and the debug section. A world
 -- table has no length (#: its keys are world numbers, not 1, 2, 3...), so
 -- count its keys with pairs.
 local function worldCounts(records)
@@ -270,7 +262,6 @@ local function debugLines(counts)
         savedText = clock.formatUtc(store.lastSavedAt) .. " UTC"
     end
 
-    -- Kept short so the recent captures fit: the plain panel can't scroll.
     -- Everything that changes every second is on line 1, which the
     -- dashboard updates in place (see ui/dashboard.lua).
     local lines = {
@@ -312,38 +303,45 @@ local function gridWorlds()
 end
 
 -- True when the dashboard is in use: PrettyUI is there, and it hasn't
--- failed to draw (then the plain panel takes over, see ContentLayerReady).
+-- failed to draw (see ContentLayerReady).
 local function usingDashboard()
-    return USE_DASHBOARD and not dashboard.failed
+    return HAS_PRETTYUI and not dashboard.failed
 end
 
--- Redraws the world grid (if wanted), then the dashboard (or the plain
--- panel). Called once a second.
+-- Redraws the world grid (if wanted), then the dashboard. Called once a second.
 local function refreshPanel()
     local now = clock.now()
     if grid.wantsOpen() then
         local shown = gridWorlds()
         grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now, worlds.total(shown))
     end
-    if usingDashboard() and not dashboard.isOpen() then
+    if not usingDashboard() or not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
-    if usingDashboard() then
-        -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
-        -- The debug lines count the real records only.
-        local lines = SHOW_DEBUG and debugLines(worldCounts(store.worlds)) or nil
-        -- The "All worlds (n / total)" button counts what the grid shows,
-        -- sample included (gridWorlds is store.worlds without a sample).
-        local counts = worldCounts(gridWorlds())
-        -- The world you're on, as the grid would show it (for the card).
-        -- byNumber[nil] is just nil, and "entry and entry.members" is nil
-        -- for a world that isn't in our list (like entry?.members in JS).
-        local entry = worlds.byNumber[currentWorld.number]
-        local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
-        dashboard.update(counts, cell, now, lines)
-    else
-        debugPanel.show(debugLines(worldCounts(store.worlds)))
-    end
+    -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
+    -- The debug lines count the real records only.
+    local lines = SHOW_DEBUG and debugLines(worldCounts(store.worlds)) or nil
+    -- The "All worlds (n / total)" button counts what the grid shows,
+    -- sample included (gridWorlds is store.worlds without a sample).
+    local counts = worldCounts(gridWorlds())
+    -- The world you're on, as the grid would show it (for the card).
+    -- byNumber[nil] is just nil, and "entry and entry.members" is nil
+    -- for a world that isn't in our list (like entry?.members in JS).
+    local entry = worlds.byNumber[currentWorld.number]
+    local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
+    dashboard.update(counts, cell, now, lines)
+end
+
+-- Without a working PrettyUI the ribbon page shows this one line instead
+-- of staying blank. ui.Text is the game's own text component.
+local function showPrettyUINeeded(layer)
+    safe.try(function()
+        local text = ui.Text.new(layer)
+        text:SetPos(8, 8)
+        text:SetSize(0, 0, 1.0, 1.0)            -- fill the page (relative size 100% x 100%)
+        text.font = id.Font.MUSEO_SANS_15PT_REGULAR
+        text.content = "Evil Trees needs the PrettyUI plugin, version 1.3.0 or later."
+    end)
 end
 
 -------------------------------------------------------------------------------
@@ -366,7 +364,7 @@ end
 -- The world grid needs PrettyUI too. Reopen it if it was open last time
 -- (e.g. before a world hop), with the same sort and filters, and save
 -- where the player puts it and what they pick.
-if prettyui ~= nil then
+if HAS_PRETTYUI then
     grid.restore(store.gridWindow)
     grid.restoreView(store.gridView)
 end
@@ -676,33 +674,24 @@ Event.ChatMessage.Subscribe("evilTrees", safe.handler("ChatMessage", chat.onChat
 -- Logging in, hopping worlds, logging out.
 Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", onGameStateChanged))
 
--- The dashboard (or the plain debug panel).
-if USE_RIBBON then
-    -- Fires each time the player opens this plugin's page in the Plugins window.
-    Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
-        if usingDashboard() then
-            dashboard.attachToRibbon(event)
-            refreshPanel()
-            if not dashboard.failed then
-                return
-            end
-            -- PrettyUI couldn't draw on a freshly opened page: use the plain
-            -- panel for the rest of this session.
-            log("Evil Trees: the dashboard failed to draw; showing the plain panel instead.")
-        end
-        debugPanel.attachToRibbon(event)
+-- The dashboard. Fires each time the player opens this plugin's page in the
+-- Plugins window (the ribbon icon, shown as "ET"), with an empty layer.
+Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
+    if usingDashboard() then
+        dashboard.attachToRibbon(event)
         refreshPanel()
-    end))
-else
-    if not debugPanel.attachFloating() then
-        log("Evil Trees: game window not ready; log in, then reload with: prl evil-trees")
     end
-end
+    -- Checked again: the first draw on a fresh page can fail
+    -- (dashboard.failed), and then it isn't tried again this session.
+    if not usingDashboard() then
+        showPrettyUINeeded(event.component)
+    end
+end))
 
 -- The settings page. The client draws a Settings icon for us
 -- ("hasSettingsIcon" in plugin.json); this fires each time the player opens
 -- it, with an empty layer to fill. Needs PrettyUI, like the grid.
-if prettyui ~= nil then
+if HAS_PRETTYUI then
     Event.SettingsLayerReady.Subscribe("evilTrees", safe.handler("SettingsLayerReady", function(event)
         gridsettings.fillHub(event.component, grid.choice, grid.setChoice)
     end))
@@ -723,5 +712,4 @@ function PluginShutdown()
     capturelog.saveIfChanged()
     dashboard.destroy()
     grid.destroy()
-    debugPanel.destroy()
 end

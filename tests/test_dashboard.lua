@@ -95,7 +95,7 @@ local handlers, errors, logged, interfaces = game.handlers, game.errors, game.lo
 local logic, server = game.logic, game.server
 
 -- The card is made of plain components: give their kinds names. (ui.Text
--- stays fakegame's table; the plain debug panel calls ui.Text.new.)
+-- stays fakegame's table; the "needs PrettyUI" notice calls ui.Text.new.)
 ui.Layer, ui.Rectangle, ui.Sprite = "Layer", "Rectangle", "Sprite"
 local realNewComponent = prettyui.NewComponent
 prettyui.NewComponent = function(kind, parent)
@@ -258,19 +258,15 @@ check("Z1 no errors so far", #errors, 0)
 for _, e in ipairs(errors) do print(e) end
 
 ---------------------------------------------------------------- PrettyUI broken
--- If the dashboard can't be built on a freshly opened page, the plain
--- debug panel takes over for the rest of the session.
+-- If the dashboard can't be built on a freshly opened page, the page says
+-- PrettyUI is needed, and the dashboard isn't tried again this session.
 prettyui.SimpleView.new = function() error("no SimpleView in this PrettyUI") end
 handlers.ContentLayerReady({ component = { width = 300, height = 500 } })
 check("P1 build error logged", #errors == 1 and string.find(errors[1], "dashboard build", 1, true) ~= nil, true)
-local fellBack = false
-for _, line in ipairs(logged) do
-  if string.find(line, "showing the plain panel", 1, true) then fellBack = true end
-end
-check("P2 fallback announced", fellBack, true)
+check("P2 page says PrettyUI is needed",
+  game.lastText ~= nil and string.find(tostring(game.lastText.content), "needs the PrettyUI plugin", 1, true) ~= nil, true)
 logic(50)
-check("P3 plain panel shows the debug text",
-  game.lastText ~= nil and string.find(tostring(game.lastText.content), "This world:", 1, true) ~= nil, true)
+check("P3 no further build attempts", #errors, 1)
 
 PluginShutdown()
 check("Z2 no further errors", #errors, 1)
