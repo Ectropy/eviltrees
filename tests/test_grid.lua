@@ -450,6 +450,16 @@ check("D8 card: sky-blue outline on your world", card.border.rgba, 0x4FC3F7FF)
 check("D9 card: willow logs", card.item.object .. "," .. tostring(card.item.hidden), "1519,false")
 check("D10 card: status after the icon", card.status.x, 8 + 18 + 4)
 
+-- The card only sets what changed: mark two fields, update with the same
+-- data a second later, and the unchanged status is not written again,
+-- while the countdown (which did change) is.
+card.status.content, card.countdown.content = "untouched", "untouched"
+grid.update(cells(NOW + 1000), NOW + 1000, 137)
+check("D11 card: unchanged status not set again", card.status.content, "untouched")
+check("D12 card: changed countdown set", card.countdown.content, "Lightning in 14m 59s  -  Dies in 24m 59s")
+grid.update(cells(NOW), NOW, 137)       -- back to NOW for the checks below
+card.status.content = "Evil willow - 45%"   -- undo the mark
+
 -- The card and toolbar are pinned. The toolbar's rows are 500 - 16 - 12
 -- = 472 wide: Sort (175), Worlds (120) and Info (150) fit on row 1 with
 -- 8-wide gaps (461), Tree goes on row 2. Two rows of 20 with a 4 gap = 44,

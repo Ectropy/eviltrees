@@ -116,7 +116,29 @@ function worldcard.new(parent, x, y)
         text.hidden = true
         card.places[index] = text
     end
+
+    -- What update last set on each component, and what each text last
+    -- measured as (see setField and linesFor). Keyed by the component
+    -- table itself, like a Map with objects as keys in JS.
+    card.lastSet = {}
+    card.measured = {}
     return card
+end
+
+-- Sets component[field] = value, but only if that isn't what we set last
+-- time: update runs every second, and most seconds nothing on the card
+-- changes but the countdown. We remember what we set (card.lastSet)
+-- rather than read the component back, as a read also asks the game.
+local function setField(card, component, field, value)
+    local last = card.lastSet[component]
+    if last == nil then
+        last = {}
+        card.lastSet[component] = last
+    end
+    if last[field] ~= value then
+        component[field] = value
+        last[field] = value
+    end
 end
 
 -- How many lines a text needs when it wraps at width, in the font called
@@ -144,6 +166,26 @@ local function lineCount(fontName, text, width)
     return math.max(1, math.min(MAX_LINES, math.floor(count)))
 end
 
+-- The words update last put on a text ("" if none yet).
+local function contentOf(card, text)
+    local last = card.lastSet[text]
+    -- "last and last.content" is nil when last is nil (like last?.content in JS).
+    return (last and last.content) or ""
+end
+
+-- lineCount for one of the card's texts, but the game is only asked again
+-- when the text's words or the width changed since it last measured them
+-- (in practice: the countdown, about once a second).
+local function linesFor(card, fontName, text, width)
+    local content = contentOf(card, text)
+    local memo = card.measured[text]
+    if memo == nil or memo.content ~= content or memo.width ~= width then
+        memo = { content = content, width = width, lines = lineCount(fontName, content, width) }
+        card.measured[text] = memo
+    end
+    return memo.lines
+end
+
 -- Puts the card's frame (card.root) where card.x / y / width / fromRight
 -- say, at its current height. width nil: as wide as the parent minus x on
 -- both sides, following the parent's resizes. A fixed width: that wide,
@@ -166,18 +208,18 @@ end
 -- statusX is where the status text starts (after the icon, if any).
 local function layout(card, width, statusX)
     local textWidth = width and (width - 2 * INNER)     -- nil stays nil
-    local statusLines = lineCount(STATUS_FONT, card.status.content, width and (width - statusX - INNER))
+    local statusLines = linesFor(card, STATUS_FONT, card.status, width and (width - statusX - INNER))
     -- The first place always keeps one line (even when empty, so the card
     -- doesn't jump); the "or ..." places take none while they are empty.
     local placeLines = {}
     for index, text in ipairs(card.places) do
-        if index > 1 and text.content == "" then
+        if index > 1 and contentOf(card, text) == "" then
             placeLines[index] = 0
         else
-            placeLines[index] = lineCount(parts.FONT, text.content, textWidth)
+            placeLines[index] = linesFor(card, parts.FONT, text, textWidth)
         end
     end
-    local countdownLines = lineCount(parts.FONT, card.countdown.content, textWidth)
+    local countdownLines = linesFor(card, parts.FONT, card.countdown, textWidth)
 
     -- Only touch the components when something moved: this runs every second.
     -- (table.concat joins a list, like placeLines.join(",") in JS.)
@@ -229,17 +271,19 @@ function worldcard.update(card, cell, now, emptyText, width)
     local hasIcon = icons.set(card.statusIcon, cell and cell.icon, cell and cell.logs)
     local statusX = hasIcon and (INNER + ICON_SIZE + 4) or INNER
 
+    -- Each change goes through setField, which skips it if the component
+    -- already shows that value (see setField).
     if cell == nil then
-        card.world.content = ""
-        card.badge.content = ""
-        card.badgeBorder.hidden = true
-        card.status.content = emptyText or ""
-        card.status.rgba = colours.MUTED
+        setField(card, card.world, "content", "")
+        setField(card, card.badge, "content", "")
+        setField(card, card.badgeBorder, "hidden", true)
+        setField(card, card.status, "content", emptyText or "")
+        setField(card, card.status, "rgba", colours.MUTED)
         for _, text in ipairs(card.places) do
-            text.content = ""
+            setField(card, text, "content", "")
         end
-        card.countdown.content = ""
-        card.border.rgba = colours.FRAME
+        setField(card, card.countdown, "content", "")
+        setField(card, card.border, "rgba", colours.FRAME)
         layout(card, width, statusX)
         return card.height
     end
@@ -247,23 +291,23 @@ function worldcard.update(card, cell, now, emptyText, width)
     -- The world number in the game's world-list colour (gold P2P, white
     -- F2P). On your own world the card has a sky-blue outline.
     local worldColour = colours.world(cell.members, false)
-    card.world.content = "w" .. cell.world
-    card.world.rgba = worldColour
-    card.border.rgba = cell.current and colours.CURRENT or colours.FRAME
+    setField(card, card.world, "content", "w" .. cell.world)
+    setField(card, card.world, "rgba", worldColour)
+    setField(card, card.border, "rgba", cell.current and colours.CURRENT or colours.FRAME)
 
     -- members is nil for worlds not in data/worlds.lua: no badge.
     if cell.members == nil then
-        card.badge.content = ""
-        card.badgeBorder.hidden = true
+        setField(card, card.badge, "content", "")
+        setField(card, card.badgeBorder, "hidden", true)
     else
-        card.badge.content = cell.members and "P2P" or "F2P"
-        card.badge.rgba = worldColour
-        card.badgeBorder.rgba = worldColour
-        card.badgeBorder.hidden = false
+        setField(card, card.badge, "content", cell.members and "P2P" or "F2P")
+        setField(card, card.badge, "rgba", worldColour)
+        setField(card, card.badgeBorder, "rgba", worldColour)
+        setField(card, card.badgeBorder, "hidden", false)
     end
 
-    card.status.content = cell.noIntel and "Nothing known yet." or (cell.status or "")
-    card.status.rgba = colours.KIND[cell.kind] or colours.MUTED
+    setField(card, card.status, "content", cell.noIntel and "Nothing known yet." or (cell.status or ""))
+    setField(card, card.status, "rgba", colours.KIND[cell.kind] or colours.MUTED)
     -- The places, one per Text: "A", "or B", "or C". "cell.places or {}"
     -- is an empty list when there are none (like cell.places ?? [] in JS).
     -- The first one gets the label: "Exact Location: X" when we
@@ -281,7 +325,7 @@ function worldcard.update(card, cell, now, emptyText, width)
                 name = "Hint: " .. name
             end
         end
-        text.content = name
+        setField(card, text, "content", name)
     end
 
     -- "Lightning in 4m 5s  -  Dies in 24m 5s": the death time as well, when
@@ -292,7 +336,7 @@ function worldcard.update(card, cell, now, emptyText, width)
     if countdown ~= nil and death ~= nil then
         countdown = countdown .. "  -  " .. death
     end
-    card.countdown.content = countdown or death or ""
+    setField(card, card.countdown, "content", countdown or death or "")
 
     layout(card, width, statusX)
     return card.height
