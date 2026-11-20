@@ -162,15 +162,14 @@ worlds.list = {
 -- byNumber[205] gives the entry for world 205 (or nil if it isn't in the list).
 -- Like building a Map from an array in JS: new Map(list.map(w => [w.number, w])).
 worlds.byNumber = {}
-for _, world in ipairs(worlds.list) do
-    worlds.byNumber[world.number] = world
-end
 
 -- How many live (not beta) worlds we track: the "137" in "3 / 137 scouted".
 -- Beta worlds never add to it: they are on the grid only for testing, and
 -- nobody scouts every live world and the betas too.
 worlds.count = 0
+
 for _, world in ipairs(worlds.list) do
+    worlds.byNumber[world.number] = world
     if not world.beta then
         worlds.count = worlds.count + 1
     end
