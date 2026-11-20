@@ -10,7 +10,7 @@
     draws the controls and tells ui/grid.lua when the player picks
     something (grid.lua keeps the choices, filters the cells and saves).
 
-    How it is drawn (tried out in the grid lab, rounds 1 and 2):
+    How it is drawn:
       - Sort, Worlds and Info are PrettyUI ComboBoxes. Giving each entry an
         `order` makes PrettyUI use its OrderedComboBox: a text box you can
         type in to filter the list, and an arrow button. (The game's own
@@ -27,8 +27,8 @@
       - Closing on a click elsewhere: while a list or the popup is open, an
         invisible Layer (a "scrim") covers the whole window and closes it
         when clicked. PrettyUI's ordered combo only closes itself when its
-        text box loses the keyboard, or on Esc, so a list opened with the
-        arrow used to stay open (lab round 2). Opening one control closes
+        text box loses the keyboard, or on Esc, so without the scrim a list
+        opened with the arrow would stay open. Opening one control closes
         any other.
 ]]
 
@@ -64,7 +64,7 @@ local WIDTHS = {
 -- number moves that text DOWN, a smaller one UP.
 --   COMBO_TEXT_TOP  the dropdowns' text inset from the top. PrettyUI's own
 --                   default (3) is made for 30-high boxes in a 15pt font
---                   and looked too low here (lab round 2).
+--                   and looks too low in our 20-high ones.
 --   TREE_TEXT_Y     the Tree button's text, from centred in the row.
 local COMBO_TEXT_TOP = 0
 local TREE_TEXT_Y = 0
@@ -121,7 +121,7 @@ end
 
 -- Closes one combo's list. There is no public call for it: combo:_Close
 -- is PrettyUI's own (PrettyUI v1.3.0 internal). Without it the list just
--- stays open, as it did before the scrim.
+-- stays open.
 local function closeCombo(combo)
     if combo.open == true and type(combo._Close) == "function" then
         pcall(function() combo:_Close() end)
@@ -164,8 +164,8 @@ end
 -- content, and we register the same kind for window.root. ownerWindow
 -- makes the combo register its list as a window overlay, so the list moves
 -- with the window. prettyui.Tooltip.registerContext and context.ownerWindow
--- (PrettyUI v1.3.0 internal) are what the lab's "Overlay screen" used; if
--- they are missing the toolbar fails to build and the grid shows without it.
+-- are PrettyUI v1.3.0 internals; if they are missing the toolbar fails to
+-- build and the grid shows without it.
 local function registerContext(host)
     local context = prettyui.Tooltip.registerContext(window.root, host, function(target)
         -- Where a component on window.root is on the game area.
@@ -414,7 +414,7 @@ end
 -- Called every frame (50 a second) by grid.lua: notices a dropdown list
 -- opening or closing (by comparing with the last frame), to show or hide
 -- the scrim. combo.open is PrettyUI's own flag (PrettyUI v1.3.0 internal);
--- without it (nil) lists just don't close on a click elsewhere, as before.
+-- without it (nil) lists just don't close on a click elsewhere.
 -- The scrim only shows when a list OPENS, so if _Close is missing and a
 -- scrim click can't close the list, the scrim still goes away.
 function gridtoolbar.onLogic()

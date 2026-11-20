@@ -19,7 +19,7 @@
     parser's job, not this file's.
 
     When to read: once per server tick (~0.6 s), but on the client frame
-    AFTER the server tick, not during it. The probe (2026-11-07) showed the game
+    AFTER the server tick, not during it. Testing in the beta showed the game
     fills in a page's text one frame (20 ms) after the server packet arrives:
     a read during Event.ServerLogic sees the previous page, or an empty box.
     When clicking quickly, each page lasts exactly one server tick, so the

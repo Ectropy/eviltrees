@@ -33,17 +33,15 @@
     core/filters.lua which cells show, in which order; this file only
     draws them.
 
-    How it is drawn (tried out first in the local "grid lab"):
+    How it is drawn:
       - Each cell is a few plain game components: a Layer (takes the mouse)
         holding a background Rectangle, an outline Rectangle, two Sprites
         (one icon slot: a sprite and an item icon) and three Texts (world
         number, tree type, countdown); two-line cells add two more (health,
-        place). 137 cells is about 1100 components, or 1370 with two lines
-        (the grid lab built 822 without a freeze; 1370 is not yet tried in
-        the beta). Switching lines rebuilds
-        the cells.
-      - Cells (and the card) are built ONCE, then only changed in place: a countdown
-        text, a colour. Like setting element.textContent in vanilla JS,
+        place). 137 cells is about 1100 components, or 1370 with two lines.
+        Switching lines rebuilds the cells.
+      - Cells (and the card) are built ONCE, then only changed in place: a
+        countdown text, a colour. Like setting element.textContent in JS,
         with no re-render. Countdowns show whole minutes, so most cells
         change once a minute. The cells are rebuilt only if the set of
         worlds changes (e.g. a world that isn't in data/worlds.lua appears).

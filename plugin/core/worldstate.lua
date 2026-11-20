@@ -361,7 +361,7 @@ end
 --   latest = true:  the LATEST it can happen, from matureLatest. Used only
 --                   while M is NOT trusted ("dies within").
 -- Events come exactly M + 10/20/30 min after the tree matured (seen to the
--- second in the beta, see research/evil-tree-locs.md).
+-- second in the beta).
 -- Returns the time, and true if it's approximate (could be off by a minute
 -- or more, because M is only known roughly).
 local function eventTime(record, k, latest)

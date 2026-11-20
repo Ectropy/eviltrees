@@ -2,7 +2,7 @@
     ui/icons.lua
     ------------
     The status icon, so a world's state can be told apart without relying
-    on colour (colour-blind players). Picked in the local sprite lab:
+    on colour (colour-blind players):
 
         alive, type known    that type's logs        (item icon)
         alive, type unknown  SKILL_ICON_WOODCUTTING_32PX
@@ -11,15 +11,14 @@
         spawn timer          RS3_ICON_TIMER_23PX
         nothing known        no icon
 
-    Two kinds of picture: a game sprite (from the client's sprite list,
-    research/pan Sprite.txt), or an item's inventory icon
+    Two kinds of picture: a game sprite (from the client's sprite list, the
+    "pan Sprite" console command), or an item's inventory icon
     (SetAssociatedObject). An icon slot holds one of each in the same place
     and shows whichever is needed, so switching never has to undo an item.
 
     core/overview.lua decides the words (cell.icon, cell.logs); this file
     turns them into pictures.
 ]]
-
 
 local icons = {}
 

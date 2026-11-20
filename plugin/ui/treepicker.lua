@@ -11,7 +11,7 @@
     closes it on a click elsewhere). This file only draws the two parts
     and reports clicks and ticks through the callbacks given to build.
 
-    How it is drawn (tried out in the grid lab, round 2):
+    How it is drawn:
       - The button is a Layer on the window holding the game's native
         dropdown frame (a ComboField, the same frame PrettyUI's own
         dropdowns use) with our own text on top.
@@ -72,8 +72,8 @@ local function buildButton(options)
     button.clickthrough = false             -- it takes the mouse
 
     local frame = prettyui.NewComponent(ui.ComboField, button)
-    -- Size it first: in the lab, a frame left at the game's default size
-    -- showed up as a stray empty box.
+    -- Size it first: a frame left at the game's default size shows up as
+    -- a stray empty box.
     frame:SetSize(0, 0, 1.0, 1.0)
     frame.clickthrough = true
     frame.stylesheetID = id.StyleSheet.COMBO_DEFAULT
