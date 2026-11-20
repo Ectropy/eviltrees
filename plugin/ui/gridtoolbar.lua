@@ -59,15 +59,10 @@ local WIDTHS = {
     trees = 140,                -- "Tree: Yew, Magic"
 }
 
--- TEXT HEIGHT: where the text sits inside the controls. Tune these in the
--- beta so the dropdowns' text and the Tree button's text line up. A bigger
--- number moves that text DOWN, a smaller one UP.
---   COMBO_TEXT_TOP  the dropdowns' text inset from the top. PrettyUI's own
---                   default (3) is made for 30-high boxes in a 15pt font
---                   and looks too low in our 20-high ones.
---   TREE_TEXT_Y     the Tree button's text, from centred in the row.
+-- The dropdowns' text inset from the top. PrettyUI's own default (3) is
+-- made for 30-high boxes in a 15pt font and looks too low in our 20-high
+-- ones; 0 lines it up with the Tree button's text.
 local COMBO_TEXT_TOP = 0
-local TREE_TEXT_Y = 0
 local TEXT_LEFT = 8             -- the dropdowns' text inset from the left (PrettyUI's default)
 
 -- The three dropdowns, left to right. Each name is also the key in the
@@ -336,7 +331,7 @@ end
 --   onChange(group, value)  the player picked something: group is "sort",
 --                           "worlds", "info" or "trees" (value: a list of keys)
 --   onReset()               Reset was clicked
--- Throws if something is missing (e.g. a different PrettyUI version);
+-- Throws if a PrettyUI internal it uses is missing (see registerContext);
 -- grid.lua then calls gridtoolbar.destroy and shows the grid without it.
 -- Nothing is placed until the first gridtoolbar.refresh.
 function gridtoolbar.build(newWindow, host, x, y, prefs, newHandlers)
@@ -352,7 +347,6 @@ function gridtoolbar.build(newWindow, host, x, y, prefs, newHandlers)
     treepicker.build(window, host, {
         trees = prefs.trees,
         height = ROW_HEIGHT,
-        textY = TREE_TEXT_Y,
         onClick = function() guarded(onTreeButton) end,
         onChange = function(values)
             guarded(function() handlers.onChange("trees", values) end)

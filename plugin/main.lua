@@ -43,15 +43,12 @@ local devlog = require("core/devlog")
 devlog.enabled = false          -- set to true to see [clock]/[store]/[world] messages in the console
 
 -- Show the debug section under the dashboard (records, tiles, recent captures).
+-- BEFORE A MOD.IO RELEASE: set this to false, and turn off core/capturelog.lua.
 local SHOW_DEBUG = true
 
--- PrettyUI is a required dependency (plugin.json: "prettyui": 6398181, its
--- Plugin Hub ID): the client loads it first and gives it to us as the
--- global "prettyui". We need PrettyUI 1.3.0 or later (we make every
--- component with prettyui.NewComponent). If it is missing anyway (e.g. a
--- dev install without it), reading the global just gives nil, and the
--- ribbon page only says that PrettyUI is needed.
-local HAS_PRETTYUI = prettyui ~= nil
+-- PrettyUI (the UI library) is a required dependency in plugin.json. The
+-- client turns it on with this plugin, and won't run this plugin without
+-- it, so the global "prettyui" is always there.
 
 local safe = require("core/safe")
 local worlds = require("data/worlds")
@@ -74,7 +71,9 @@ local dashboard = require("ui/dashboard")
 local grid = require("ui/grid")
 local gridsettings = require("ui/gridsettings")
 
-local VERSION = "0.8.0-dev"
+-- The release version, the same as "version" in plugin.json. Changed only
+-- when a release is made, never during development.
+local VERSION = "0.1.0"
 local MAX_RECENT = 3            -- how many recent captures the debug section lists
 local MAX_OTHER_WORLDS = 4      -- how many other worlds' records it lists
 local MS_PER_MINUTE = 60000
@@ -298,12 +297,6 @@ local function gridWorlds()
     return merged
 end
 
--- True when the dashboard is in use: PrettyUI is there, and it hasn't
--- failed to draw (see ContentLayerReady).
-local function usingDashboard()
-    return HAS_PRETTYUI and not dashboard.failed
-end
-
 -- Redraws the world grid (if wanted), then the dashboard. Called once a second.
 local function refreshPanel()
     local now = clock.now()
@@ -311,7 +304,7 @@ local function refreshPanel()
     if grid.wantsOpen() then
         grid.update(overview.cells(shown, worlds.list, currentWorld.number, now), now)
     end
-    if not usingDashboard() or not dashboard.isOpen() then
+    if not dashboard.isOpen() then
         return      -- nobody can see it; it's redrawn when the page opens
     end
     -- "SHOW_DEBUG and x or nil" is Lua's SHOW_DEBUG ? x : nil.
@@ -326,18 +319,6 @@ local function refreshPanel()
     local entry = worlds.byNumber[currentWorld.number]
     local cell = overview.currentCell(store.worlds, currentWorld.number, entry and entry.members, now)
     dashboard.update(scouted, cell, now, lines)
-end
-
--- Without a working PrettyUI the ribbon page shows this one line instead
--- of staying blank. ui.Text is the game's own text component.
-local function showPrettyUINeeded(layer)
-    safe.try(function()
-        local text = ui.Text.new(layer)
-        text:SetPos(8, 8)
-        text:SetSize(0, 0, 1.0, 1.0)            -- fill the page (relative size 100% x 100%)
-        text.font = id.Font.MUSEO_SANS_15PT_REGULAR
-        text.content = "Evil Trees needs the PrettyUI plugin, version 1.3.0 or later."
-    end)
 end
 
 -------------------------------------------------------------------------------
@@ -357,13 +338,11 @@ local function noteChange(changed)
     devlog.print("[state]", line)
 end
 
--- The world grid needs PrettyUI too. Reopen it if it was open last time
--- (e.g. before a world hop), with the same sort and filters, and save
--- where the player puts it and what they pick.
-if HAS_PRETTYUI then
-    grid.restore(store.gridWindow)
-    grid.restoreView(store.gridView)
-end
+-- Reopen the world grid if it was open last time (e.g. before a world
+-- hop), with the same sort and filters, and save where the player puts it
+-- and what they pick.
+grid.restore(store.gridWindow)
+grid.restoreView(store.gridView)
 grid.setOnLayoutChange(function(state)
     store.gridWindow = state
     store.markChanged()
@@ -673,25 +652,16 @@ Event.GameStateChanged.Subscribe("evilTrees", safe.handler("GameStateChanged", o
 -- The dashboard. Fires each time the player opens this plugin's page in the
 -- Plugins window (the ribbon icon, shown as "ET"), with an empty layer.
 Event.ContentLayerReady.Subscribe("evilTrees", safe.handler("ContentLayerReady", function(event)
-    if usingDashboard() then
-        dashboard.attachToRibbon(event)
-        refreshPanel()
-    end
-    -- Checked again: the first draw on a fresh page can fail
-    -- (dashboard.failed), and then it isn't tried again this session.
-    if not usingDashboard() then
-        showPrettyUINeeded(event.component)
-    end
+    dashboard.attachToRibbon(event)
+    refreshPanel()
 end))
 
 -- The settings page. The client draws a Settings icon for us
 -- ("hasSettingsIcon" in plugin.json); this fires each time the player opens
--- it, with an empty layer to fill. Needs PrettyUI, like the grid.
-if HAS_PRETTYUI then
-    Event.SettingsLayerReady.Subscribe("evilTrees", safe.handler("SettingsLayerReady", function(event)
-        gridsettings.fillHub(event.component, grid.choice, grid.setChoice)
-    end))
-end
+-- it, with an empty layer to fill.
+Event.SettingsLayerReady.Subscribe("evilTrees", safe.handler("SettingsLayerReady", function(event)
+    gridsettings.fillHub(event.component, grid.choice, grid.setChoice)
+end))
 
 -------------------------------------------------------------------------------
 -- Go

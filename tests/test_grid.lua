@@ -63,7 +63,6 @@ local radio = nil           -- the newest "lines" RadioButton (the gear's page)
 local cardRadio = nil       -- the newest "card" RadioButton (the gear's page)
 local contexts = {}         -- every Tooltip.registerContext call
 local brokenToolbar = false -- true: a PrettyUI without ComboBox (the toolbar fails to build)
-local brokenArrows = false  -- true: a PrettyUI without the ARROW_* sprites (SpriteButton throws for them)
 
 prettyui = {
   NewComponent = newComponent,
@@ -141,7 +140,6 @@ prettyui = {
     return button
   end },
   SpriteButton = { new = function(parent, name, action, options)
-    if brokenArrows and string.sub(name, 1, 6) == "ARROW_" then error("Unknown SpriteButton sprite: " .. name) end
     local button = { name = name, action = action, options = options, disabled = false }
     button.root = newComponent("SpriteButton", parent)
     -- Its hover text: counts how often it was hidden.
@@ -1052,23 +1050,7 @@ local oldArrow = spriteButtons.ARROW_UP
 grid.destroy()
 check("SB29 arrows removed with the window", oldArrow.destroyed, true)
 
--- A PrettyUI without the arrow sprites: the grid opens without arrows,
--- the side still works from the settings, and one line is logged.
-brokenArrows = true
-spriteButtons = {}
-logged = {}
-grid.restoreView({ lines = "one", card = "left" })
-update()
-window = windows[#windows]
-area = window._scroll.root
-check("SB30 grid open without arrows", tostring(grid.wantsOpen() and not window.destroyed) .. "," .. dockShown(), "true,")
-check("SB31 one error logged", #logged .. "|" .. string.sub(logged[1] or "", 1, 24), "1|[error] grid card arrows")
-check("SB32 the sidebar still works", cardLayerNow().x .. "," .. cardLayerNow().w .. "," .. area.x, "14,240,260")
-pickCardOnHub("top")
-update()
-check("SB33 and moves back from the settings", cardLayerNow().w .. "," .. area.x .. "," .. #logged, "-28,8,1")
-brokenArrows = false
-grid.destroy()
+grid.restoreView({ lines = "one", card = "top" })
 grid.update(cells(NOW), NOW)
 window = windows[#windows]
 area = window._scroll.root

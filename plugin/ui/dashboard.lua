@@ -30,11 +30,6 @@
         again. That happens rarely. To notice, each build remembers a
         "signature": everything it shows, joined into one string. A
         different signature means rebuild.
-
-    If building fails on a page that was just opened, something is wrong
-    with PrettyUI itself (e.g. a version without a call we use), so
-    dashboard.failed becomes true and, for the rest of the session, main.lua
-    shows a one-line "needs PrettyUI" notice instead.
 ]]
 
 local safe = require("core/safe")
@@ -43,9 +38,6 @@ local colours = require("ui/colours")
 local worldcard = require("ui/worldcard")
 
 local dashboard = {}
-
--- True once the dashboard couldn't be built on a freshly opened page.
-dashboard.failed = false
 
 local MARGIN = 8            -- around the card and the view
 local GAP = 6               -- between the card and the view (as the grid's card and toolbar)
@@ -63,7 +55,6 @@ local debugClock = nil      -- the debug section's first line, updated in place
 local onClear = nil         -- function(worldNumber), set by main.lua
 local onToggleGrid = nil    -- function(), set by main.lua
 local onToggleSample = nil  -- function(), set by main.lua (debug only)
-local freshParent = false   -- true from opening the page until the first build works
 
 -- Removes the view (if any). Destroy can fail if the page was already
 -- closed and its components are gone; that's fine, we drop it either way.
@@ -225,13 +216,9 @@ function dashboard.update(scouted, cell, now, debugLines)
     if not ok then
         log("[error] dashboard build: " .. tostring(err))
         destroyAll()                    -- remove whatever was half built
-        if freshParent then
-            dashboard.failed = true     -- main.lua then shows "needs PrettyUI"
-        end
-        parent = nil                    -- else: wait for the page to be opened again
+        parent = nil                    -- try again when the page is next opened
         return
     end
-    freshParent = false
 
     -- Then change in place what ticks in the view: the debug clock line.
     ok, err = pcall(function()
@@ -255,7 +242,6 @@ end
 function dashboard.attachToRibbon(event)
     destroyAll()
     parent = event.component
-    freshParent = true
 end
 
 -- True while there's a page to draw into (so main.lua can skip the work

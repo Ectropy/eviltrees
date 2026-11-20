@@ -158,12 +158,10 @@ game.locs[11394] = { { isValid = true, coordGrid = { x = 2702, z = 3640, level =
 handlers.LocAdded({ config = { id = 11394 }, coordGrid = { x = 2702, z = 3640, level = 0 } })
 check("M3 tile", store.worlds[204].tileX, 2702)
 
--- no PrettyUI in this test: the ribbon page says it's needed
+-- (No PrettyUI in this test, so the ribbon page is never opened here:
+-- tests/test_dashboard.lua covers it.)
 store.worlds[205] = { status = "none", spawnAt = 1793945263552, spawnEarliest = 1793945232000, spawnLatest = 1793945283000, hint = "close to Seers" }
-handlers.ContentLayerReady({ component = {} })
 logic(50)
-local panel = game.lastText and game.lastText.content or ""
-check("M6 page says PrettyUI is needed", string.find(panel, "needs the PrettyUI plugin", 1, true) ~= nil, true)
 
 -- lightning: Thor (NPC id 416) counts once; other NPCs are ignored.
 -- First let the clock see a minute change, so it knows the seconds.

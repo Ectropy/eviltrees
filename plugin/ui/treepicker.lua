@@ -81,7 +81,7 @@ local function buildButton(options)
     -- A one-line Text in the dropdowns' font (ui/parts.lua). The anchor
     -- trick: SetSize(w, h, 1.0, 0) makes the width "the button's width +
     -- w", so the text follows when the button stretches.
-    label = parts.text(button, TEXT_X, options.textY, 0, options.height)
+    label = parts.text(button, TEXT_X, 0, 0, options.height)
     label:SetSize(-(TEXT_X + ARROW_SPACE), options.height, 1.0, 0)
     label.rgba = TEXT_COLOUR
     labelText = ""
@@ -154,11 +154,10 @@ end
 -- game area). options:
 --   trees    the ticked tree keys to start with, e.g. { "yew" }
 --   height   the button's height
---   textY    moves the button's text down (see gridtoolbar.lua's TREE_TEXT_Y)
 --   onClick  function(): the button was clicked
 --   onChange function(values): the ticks changed; values lists the ticked keys
--- May throw (e.g. a PrettyUI without CheckboxButton): gridtoolbar.lua
--- then calls treepicker.destroy to remove what was made.
+-- If it throws, gridtoolbar.lua calls treepicker.destroy to remove what
+-- was made.
 function treepicker.build(newWindow, newHost, options)
     window, host = newWindow, newHost
     popupOpen = false

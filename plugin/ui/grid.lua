@@ -77,8 +77,9 @@
     go through grid.setOnViewChange. main.lua also calls grid.onLogic every
     frame, so an open dropdown notices a click elsewhere at once.
 
-    If the toolbar fails (e.g. a PrettyUI version without something it
-    uses), the grid shows every world without it, and logs one line.
+    If the toolbar fails (it relies on PrettyUI internals, which a future
+    PrettyUI may change), the grid shows every world without it, and logs
+    one line.
 ]]
 
 local overview = require("core/overview")
@@ -1390,14 +1391,7 @@ local function createWindow()
     findScrollArea()
     buildCard()
     if pin ~= nil then
-        -- If the arrows can't be made (e.g. a PrettyUI without these
-        -- sprites), the grid goes on without them: the settings pages
-        -- still move the card.
-        local ok, err = pcall(buildDock)
-        if not ok then
-            log("[error] grid card arrows: " .. tostring(err) .. " (showing the grid without them)")
-            destroyDock()
-        end
+        buildDock()
     end
     buildNotice()
     buildToolbar(parent)
@@ -1522,8 +1516,8 @@ function grid.update(cells, now)
         render(cells, now)
     end)
     if not ok then
-        -- Something is wrong (e.g. a PrettyUI version without a call we
-        -- use). Stop trying, so the console isn't flooded every second.
+        -- Something is wrong. Stop trying, so the console isn't flooded
+        -- every second.
         log("[error] grid: " .. tostring(err) .. " (grid closed)")
         destroyWindow()
         wantOpen = false
