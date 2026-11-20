@@ -51,6 +51,7 @@
 ]]
 
 local filters = require("core/filters")
+local colours = require("ui/colours")
 local parts = require("ui/parts")
 
 local gridsettings = {}
@@ -72,7 +73,6 @@ local HEADING_HEIGHT = 20
 local RADIO_ROW = 22            -- one choice in a PrettyUI RadioButton (its ROW_HEIGHT)
 local SECTION_GAP = 10          -- between one setting's radio and the next heading
 local PAGE_BG = 0x1B1814FF      -- solid, close to the window's own background
-local GOLD = 0xF2C66DFF         -- PrettyUI's title gold: the heading and the underline
 
 -------------------------------------------------------------------------------
 -- State (one grid window at a time)
@@ -179,7 +179,7 @@ local function buildPage(left, top)
         local heading = parts.text(root, PAD, y, 0, HEADING_HEIGHT, nil, id.Font.MUSEO_SANS_13PT_BOLD)
         heading:SetSize(-2 * PAD, HEADING_HEIGHT, 1.0, 0)
         heading.content = setting.title
-        heading.rgba = GOLD
+        heading.rgba = colours.GOLD
         y = y + HEADING_HEIGHT + 2
 
         radios[group] = prettyui.RadioButton.new(root, choicesOf(setting.entries), {
@@ -214,7 +214,7 @@ local function buildGear()
     underline:SetPos(GEAR_X, UNDERLINE_Y, 1.0)
     underline:SetSize(GEAR_SIZE, 2)
     underline.fill = true
-    underline.rgba = GOLD
+    underline.rgba = colours.GOLD
     underline.clickthrough = true
     underline.hidden = true
 

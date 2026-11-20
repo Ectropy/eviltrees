@@ -33,6 +33,7 @@
 ]]
 
 local filters = require("core/filters")
+local colours = require("ui/colours")
 local treepicker = require("ui/treepicker")
 
 local gridtoolbar = {}
@@ -49,7 +50,6 @@ local COUNT_WIDTH = 60          -- the gold "40 / 137"
 local RESET_WIDTH = 56
 local COUNT_GAP = 4             -- between the count and Reset
 local FONT = "MUSEO_SANS_11PT_REGULAR"
-local COUNT_COLOUR = 0xF2C66DFF -- PrettyUI's title gold
 
 -- Each control's natural width (narrower only if the window is).
 local WIDTHS = {
@@ -233,7 +233,7 @@ local function buildCountAndReset()
     -- BOTTOMRIGHT puts the text on the right, next to Reset (the game's
     -- align modes are shared by both directions).
     count = newText(ui.AlignMode.BOTTOMRIGHT)
-    count.rgba = COUNT_COLOUR
+    count.rgba = colours.GOLD
     count.hidden = true
     countText = ""
     reset = prettyui.SimpleButton.new(window.root, "Reset", function()

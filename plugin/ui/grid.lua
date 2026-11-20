@@ -156,7 +156,7 @@ local MUTED = colours.MUTED
 local CELL_BG = 0x171512E8              -- PrettyUI's list background
 local CELL_BG_HOVER = 0x393530F2        -- PrettyUI's hover
 local CELL_BG_SELECTED = 0x4A4640FF     -- PrettyUI's selected
-local LINK_COLOUR = 0xF2C66DFF          -- PrettyUI's title gold: "remove filters."
+local LINK_COLOUR = colours.GOLD        -- "remove filters."
 local LINK_HOVER_COLOUR = 0xFFE9A8FF    -- the link, brighter while the mouse is on it
 
 -------------------------------------------------------------------------------

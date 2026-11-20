@@ -22,6 +22,7 @@
 ]]
 
 local filters = require("core/filters")
+local colours = require("ui/colours")
 
 local treepicker = {}
 
@@ -36,7 +37,6 @@ local POPUP_PAD = 6             -- inside the popup, around the tick boxes
 local POPUP_GAP = 2             -- between the button and the popup
 local TEXT_COLOUR = 0xE9E5DDFF  -- PrettyUI's control text: the dropdowns' text colour
 local POPUP_BG = 0x171512F8     -- PrettyUI's list background, less see-through
-local POPUP_BORDER = 0x716B61FF -- PrettyUI's frame
 
 local HOOK_ID = "evilTreesTreePicker"   -- our name for the handlers we subscribe
 
@@ -141,7 +141,7 @@ local function buildPopup(options)
     popup.root:SetSize(popup.width, popup.height)
     popup.root.clickthrough = false         -- clicks on it don't reach the window behind
     newRectangle(popup.root, true, POPUP_BG)
-    newRectangle(popup.root, false, POPUP_BORDER)
+    newRectangle(popup.root, false, colours.FRAME)
     popup.checks = prettyui.CheckboxButton.new(popup.root, CHOICES, {
         x = POPUP_PAD, y = POPUP_PAD,
         selectedValues = options.trees,

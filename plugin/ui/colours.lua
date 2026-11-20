@@ -16,7 +16,8 @@ colours.MUTED = 0x8B8882FF          -- PrettyUI's disabled text: nothing to say
 colours.PLACE = 0xAFA27FFF          -- secondary text: places, hints
 colours.COUNTDOWN = 0xF0A050FF      -- the card's countdown: warm orange
 colours.FRAME = 0x716B61FF          -- PrettyUI's frame: a plain outline
-colours.SELECTED = 0xF2C66DFF       -- PrettyUI's title gold: the world you clicked
+colours.GOLD = 0xF2C66DFF           -- PrettyUI's title gold: headings, links, counts
+colours.SELECTED = colours.GOLD     -- the world you clicked
 
 -- The world you're on. NOT white or gold: those are the world list's F2P
 -- and P2P colours (below). A bright sky blue is used by nothing else here.
