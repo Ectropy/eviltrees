@@ -18,7 +18,9 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-DEFAULT_DB = Path(r"C:\ProgramData\Jagex\RuneScape-BETA\plugins\PluginData.db")
+from beta_client import PLUGINS_PATH
+
+DEFAULT_DB = PLUGINS_PATH / "PluginData.db"
 
 
 def main() -> None:
